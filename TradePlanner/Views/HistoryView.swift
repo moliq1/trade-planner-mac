@@ -64,7 +64,7 @@ struct HistoryView: View {
                                 Text("\(displayDecimal(plan.ratioText)) R")
                                     .foregroundStyle(.green)
                                     .font(.subheadline.bold())
-                                Text(plan.currencyCode)
+                                Text(plan.settlementCurrency)
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -82,7 +82,7 @@ struct HistoryView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(plan.displayName).font(.title2.bold())
-                                Text("\(plan.symbol) · \(TradeMarket(rawValue: plan.marketRaw)?.title ?? "其他") · \(plan.currencyCode)")
+                                Text("\(plan.symbol) · \(TradeMarket(rawValue: plan.marketRaw)?.title ?? "其他") · 报价 \(plan.currencyCode) / 金额 \(plan.settlementCurrency)")
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -107,15 +107,23 @@ struct HistoryView: View {
                             summaryMetric("盈利比例", "+\(displayDecimal(plan.gainPercentageText))%")
                             summaryMetric("盈亏比", "\(displayDecimal(plan.ratioText)) R")
                         }
+                        if plan.marketRaw == TradeMarket.hongKong.rawValue, let rate = plan.hkdToCnyText {
+                            HStack {
+                                Text("港币兑人民币（保存时汇率）")
+                                Spacer()
+                                Text("1 HKD = \(rate) CNY").fontWeight(.semibold)
+                            }
+                            .font(.caption)
+                        }
                         if let manual = plan.enteredQuantity {
                             Divider()
                             HStack(spacing: 18) {
                                 summaryMetric("计划买入股数", "\(manual) 股")
-                                summaryMetric("本笔止损亏损", plan.enteredLossText.map { "−\(displayDecimal($0))" } ?? "—")
-                                summaryMetric("本笔止盈盈利", plan.enteredGainText.map { "+\(displayDecimal($0))" } ?? "—")
+                                summaryMetric("本笔止损亏损（\(plan.settlementCurrency)）", plan.enteredLossText.map { "−\(displayDecimal($0))" } ?? "—")
+                                summaryMetric("本笔止盈盈利（\(plan.settlementCurrency)）", plan.enteredGainText.map { "+\(displayDecimal($0))" } ?? "—")
                             }
                             HStack(spacing: 18) {
-                                summaryMetric("买入金额", plan.enteredCostText.map(displayDecimal) ?? "—")
+                                summaryMetric("买入金额（\(plan.settlementCurrency)）", plan.enteredCostText.map(displayDecimal) ?? "—")
                                 summaryMetric("占总本金风险", plan.riskAsCapitalPercentageText.map { "\(displayDecimal($0))%" } ?? "—")
                             }
                         }
@@ -123,8 +131,8 @@ struct HistoryView: View {
                             Divider()
                             HStack(spacing: 18) {
                                 summaryMetric("预算参考股数", "\(reference) 股")
-                                summaryMetric("预算理论亏损", plan.plannedLossText.map { "−\(displayDecimal($0))" } ?? "—")
-                                summaryMetric("预算理论盈利", plan.plannedGainText.map { "+\(displayDecimal($0))" } ?? "—")
+                                summaryMetric("预算理论亏损（\(plan.settlementCurrency)）", plan.plannedLossText.map { "−\(displayDecimal($0))" } ?? "—")
+                                summaryMetric("预算理论盈利（\(plan.settlementCurrency)）", plan.plannedGainText.map { "+\(displayDecimal($0))" } ?? "—")
                             }
                         }
                         Divider()
@@ -219,7 +227,7 @@ struct CSVDocument: FileDocument {
                       "亏损比例%", "盈利比例%", "收益风险比R", "参考股数", "计划亏损", "计划盈利",
                       "输入止损模式", "输入止损值", "输入止盈模式", "输入止盈值",
                       "账户资金", "风险预算%", "每手股数", "状态", "备注", "创建时间", "更新时间",
-                      "计划买入股数", "本笔预计成本", "本笔止损亏损", "本笔止盈盈利", "本笔亏损占本金%"]
+                      "计划买入股数", "本笔预计成本", "本笔止损亏损", "本笔止盈盈利", "本笔亏损占本金%", "金额计价币种", "HKD兑CNY参考汇率"]
         // Deliberately construct the columns in small typed groups: Swift's
         // type checker struggles with a giant heterogeneous optional expression.
         let rows: [[String]] = plans.map { p -> [String] in
@@ -242,7 +250,8 @@ struct CSVDocument: FileDocument {
             fields.append(contentsOf: [
                 p.enteredQuantity.map { String($0) } ?? "",
                 p.enteredCostText ?? "", p.enteredLossText ?? "",
-                p.enteredGainText ?? "", p.riskAsCapitalPercentageText ?? ""
+                p.enteredGainText ?? "", p.riskAsCapitalPercentageText ?? "",
+                p.settlementCurrency, p.hkdToCnyText ?? ""
             ])
             return fields
         }

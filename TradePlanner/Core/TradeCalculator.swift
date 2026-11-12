@@ -16,6 +16,8 @@ public struct TradeCalculationInput: Sendable {
     public var lotSize: Int
     /// Optional planned/entered quantity. Nil means risk-budget sizing only.
     public var enteredQuantity: Int?
+    /// CNY per unit of stock quote currency; 1 for A shares, HKD/CNY for HK shares.
+    public var priceToCNYRate: Decimal
 
     public init(
         entryPrice: Decimal,
@@ -26,7 +28,8 @@ public struct TradeCalculationInput: Sendable {
         accountCapital: Decimal? = nil,
         riskPercentage: Decimal? = nil,
         lotSize: Int = 1,
-        enteredQuantity: Int? = nil
+        enteredQuantity: Int? = nil,
+        priceToCNYRate: Decimal = 1
     ) {
         self.entryPrice = entryPrice
         self.stopInput = stopInput
@@ -37,11 +40,13 @@ public struct TradeCalculationInput: Sendable {
         self.riskPercentage = riskPercentage
         self.lotSize = lotSize
         self.enteredQuantity = enteredQuantity
+        self.priceToCNYRate = priceToCNYRate
     }
 }
 
 public struct TradeCalculation: Sendable {
     public let entryPrice: Decimal
+    public let priceToCNYRate: Decimal
     public let stopPrice: Decimal
     public let targetPrice: Decimal
     public let stopLossPercentage: Decimal
@@ -74,6 +79,7 @@ public enum TradeCalculationError: String, Error, LocalizedError, Equatable, Sen
     case invalidLotSize
     case excessiveQuantity
     case invalidEnteredQuantity
+    case invalidExchangeRate
 
     public var errorDescription: String? {
         switch self {
@@ -85,6 +91,7 @@ public enum TradeCalculationError: String, Error, LocalizedError, Equatable, Sen
         case .invalidLotSize: return "每手股数必须是大于 0 的整数。"
         case .excessiveQuantity: return "计算出的股数过大，请检查参数。"
         case .invalidEnteredQuantity: return "计划买入股数必须为正整数，且不能超过可计算范围。"
+        case .invalidExchangeRate: return "港币兑人民币汇率必须大于 0。"
         }
     }
 }
@@ -95,6 +102,7 @@ public enum TradeCalculator {
         let entry = input.entryPrice
         guard entry > 0 else { throw TradeCalculationError.invalidEntry }
         guard input.lotSize > 0 else { throw TradeCalculationError.invalidLotSize }
+        guard input.priceToCNYRate > 0 else { throw TradeCalculationError.invalidExchangeRate }
         if let entered = input.enteredQuantity {
             guard entered > 0 else { throw TradeCalculationError.invalidEnteredQuantity }
         }
@@ -123,6 +131,10 @@ public enum TradeCalculator {
 
         let riskPerShare = entry - stop
         let rewardPerShare = target - entry
+        let fx = input.priceToCNYRate
+        let riskPerShareCNY = riskPerShare * fx
+        let rewardPerShareCNY = rewardPerShare * fx
+        let entryPerShareCNY = entry * fx
         let ratio = rewardPerShare / riskPerShare
         let stopPct = riskPerShare / entry * 100
         let targetPct = rewardPerShare / entry * 100
@@ -144,8 +156,8 @@ public enum TradeCalculator {
                 throw TradeCalculationError.invalidRiskPercentage
             }
             let budget = capital * riskPercent / 100
-            let maxByRisk = budget / riskPerShare
-            let maxByCash = capital / entry
+            let maxByRisk = budget / riskPerShareCNY
+            let maxByCash = capital / entryPerShareCNY
             let maxShares = min(maxByRisk, maxByCash)
             let lots = (NSDecimalNumber(decimal: maxShares / Decimal(input.lotSize)))
                 .rounding(accordingToBehavior: NSDecimalNumberHandler(
@@ -162,16 +174,16 @@ public enum TradeCalculator {
             let shares = lots.intValue * input.lotSize
             riskBudget = budget
             quantity = shares
-            cost = Decimal(shares) * entry
-            loss = Decimal(shares) * riskPerShare
-            gain = Decimal(shares) * rewardPerShare
+            cost = Decimal(shares) * entryPerShareCNY
+            loss = Decimal(shares) * riskPerShareCNY
+            gain = Decimal(shares) * rewardPerShareCNY
         }
 
         // Actual plan: calculated from the user-entered shares, never confused
         // with the suggested quantity from the separate risk budget.
-        let enteredCost = input.enteredQuantity.map { Decimal($0) * entry }
-        let enteredLoss = input.enteredQuantity.map { Decimal($0) * riskPerShare }
-        let enteredGain = input.enteredQuantity.map { Decimal($0) * rewardPerShare }
+        let enteredCost = input.enteredQuantity.map { Decimal($0) * entryPerShareCNY }
+        let enteredLoss = input.enteredQuantity.map { Decimal($0) * riskPerShareCNY }
+        let enteredGain = input.enteredQuantity.map { Decimal($0) * rewardPerShareCNY }
         let enteredCapitalPercent: Decimal?
         let enteredPositionPercent: Decimal?
         let aboveBudget: Bool?
@@ -191,6 +203,7 @@ public enum TradeCalculator {
 
         return TradeCalculation(
             entryPrice: entry,
+            priceToCNYRate: fx,
             stopPrice: stop,
             targetPrice: target,
             stopLossPercentage: stopPct,

@@ -138,4 +138,57 @@ final class TradeCalculatorTests: XCTestCase {
         ))) { XCTAssertEqual($0 as? TradeCalculationError, .invalidEnteredQuantity) }
     }
 
+
+    func testHongKongConversionUsesRMBForEveryCashAndRiskField() throws {
+        let rate = Decimal(string: "0.85633")!
+        let output = try TradeCalculator.calculate(.init(
+            entryPrice: 100, stopInput: 95, stopMode: .price,
+            targetInput: 115, targetMode: .price,
+            accountCapital: 100_000, riskPercentage: 1,
+            lotSize: 100, enteredQuantity: 1_000, priceToCNYRate: rate
+        ))
+        XCTAssertEqual(output.stopPrice, 95) // HKD prices remain HKD
+        XCTAssertEqual(output.targetPrice, 115)
+        XCTAssertEqual(output.rewardRiskRatio, 3)
+        XCTAssertEqual(output.enteredCost, Decimal(string: "85633")!)
+        XCTAssertEqual(output.enteredLoss, Decimal(string: "4281.65")!)
+        XCTAssertEqual(output.enteredGain, Decimal(string: "12844.95")!)
+        XCTAssertEqual(output.enteredPositionPercentOfCapital, Decimal(string: "85.633")!)
+        XCTAssertEqual(output.enteredRiskPercentOfCapital, Decimal(string: "4.28165")!)
+        XCTAssertEqual(output.exceedsRiskBudget, true)
+        XCTAssertEqual(output.suggestedQuantity, 200) // 1000 / (5 * 0.85633) = 233 -> 200
+        XCTAssertEqual(output.estimatedCost, Decimal(string: "17126.6")!)
+        XCTAssertEqual(output.plannedLoss, Decimal(string: "856.33")!)
+        XCTAssertEqual(output.plannedGain, Decimal(string: "2568.99")!)
+    }
+
+    func testExchangeRateCanBeEditedAndAStocksRemainOneToOne() throws {
+        let hk = try TradeCalculator.calculate(.init(
+            entryPrice: 100, stopInput: 90, stopMode: .price,
+            targetInput: 110, targetMode: .price,
+            enteredQuantity: 100, priceToCNYRate: Decimal(string: "0.85")!
+        ))
+        XCTAssertEqual(hk.enteredCost, 8500)
+        XCTAssertEqual(hk.enteredLoss, 850)
+        let a = try TradeCalculator.calculate(.init(
+            entryPrice: 100, stopInput: 90, stopMode: .price,
+            targetInput: 110, targetMode: .price, enteredQuantity: 100
+        ))
+        XCTAssertEqual(a.enteredCost, 10000)
+        XCTAssertEqual(a.enteredLoss, 1000)
+    }
+
+    func testRejectsNonpositiveRate() {
+        XCTAssertThrowsError(try TradeCalculator.calculate(.init(
+            entryPrice: 100, stopInput: 95, stopMode: .price,
+            targetInput: 110, targetMode: .price, priceToCNYRate: 0
+        ))) { XCTAssertEqual($0 as? TradeCalculationError, .invalidExchangeRate) }
+        var draft = TradeDraft()
+        draft.market = .hongKong
+        draft.hkdToCnyText = "not-a-rate"
+        XCTAssertThrowsError(try draft.calculationInput()) {
+            XCTAssertEqual($0 as? TradeCalculationError, .invalidExchangeRate)
+        }
+    }
+
 }

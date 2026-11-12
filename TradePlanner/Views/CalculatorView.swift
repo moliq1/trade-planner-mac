@@ -37,6 +37,8 @@ struct CalculatorView: View {
                 stopCard
                 targetCard
 
+                riskSettings
+
                 if let result {
                     outcomeCard(result)
                 } else if case .failure(let error) = preview {
@@ -46,8 +48,6 @@ struct CalculatorView: View {
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-
-                riskSettings
 
                 HStack(spacing: 10) {
                     Text("状态").font(.caption).foregroundColor(.secondary)
@@ -110,20 +110,8 @@ struct CalculatorView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 11) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.title2.weight(.semibold))
-                .foregroundColor(.white)
-                .frame(width: 42, height: 42)
-                .background(RoundedRectangle(cornerRadius: 12).fill(cobalt))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(editingPlanID == nil ? "交易计划" : "编辑交易计划")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                Text("计算风险 · 规划盈亏 · 保存决策")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            Spacer(minLength: 2)
+        HStack(spacing: 9) {
+            Spacer()
             Button {
                 openWindow(id: "history")
             } label: {
@@ -136,14 +124,13 @@ struct CalculatorView: View {
                 Label("退出", systemImage: "power")
             }
             .buttonStyle(.bordered)
-            .help("退出 TradePlanner（快捷键 ⌘Q）")
             .keyboardShortcut("q", modifiers: .command)
         }
         .padding(.bottom, 2)
     }
 
     private var identityCard: some View {
-        VStack(spacing: 9) {
+        VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 10) {
                 textInput("股票代码", placeholder: "601899 / 02899.HK", text: $draft.symbol)
                 textInput("股票名称", placeholder: "选填", text: $draft.companyName)
@@ -152,9 +139,8 @@ struct CalculatorView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     fieldLabel("交易市场")
                     Picker("交易市场", selection: $draft.market) {
-                        ForEach(TradeMarket.allCases) { market in
-                            Text(market.title).tag(market)
-                        }
+                        Text("A 股").tag(TradeMarket.chinaA)
+                        Text("港股").tag(TradeMarket.hongKong)
                     }
                     .labelsHidden()
                     .onChange(of: draft.market) { newMarket in
@@ -162,17 +148,27 @@ struct CalculatorView: View {
                         draft.lotSizeText = newMarket.defaultLotSize
                     }
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .leading, spacing: 4) {
-                    fieldLabel("货币")
-                    Picker("货币", selection: $draft.currencyCode) {
-                        ForEach(["CNY", "HKD", "USD"], id: \.self) { code in
-                            Text(code).tag(code)
-                        }
-                    }
-                    .labelsHidden()
+                    fieldLabel("报价与人民币结算")
+                    Text(draft.market == .hongKong ? "港币报价 · 人民币金额" : "人民币报价 · 人民币金额")
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if draft.market == .hongKong {
+                VStack(alignment: .leading, spacing: 5) {
+                    textInput("港币兑人民币（1 HKD = ? CNY）",
+                              placeholder: TradeDraft.defaultHKDToCNY,
+                              text: $draft.hkdToCnyText)
+                    Text("默认 2026-11-12 央行中间价 0.85633 · 固定参考，可修改；与港股通实际结算汇率不同")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .panel()
@@ -181,23 +177,10 @@ struct CalculatorView: View {
     private var entryCard: some View {
         VStack(alignment: .leading, spacing: 9) {
             sectionTitle("买入计划", icon: "arrow.down.left", tint: cobalt)
-            textInput("计划买入价", placeholder: "例如 168.10", text: $draft.entryText)
-            HStack(alignment: .bottom, spacing: 10) {
-                textInput("计划买入股数（选填）", placeholder: "填股数后计算实际盈亏", text: $draft.enteredQuantityText)
-                if let result, let cost = result.enteredCost {
-                    VStack(alignment: .trailing, spacing: 5) {
-                        fieldLabel("预计买入金额")
-                        Text(DecimalText.display(cost))
-                            .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                            .monospacedDigit()
-                        Text(draft.currencyCode)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(minWidth: 120, alignment: .trailing)
-                    .padding(.bottom, 4)
-                }
-            }
+            textInput(draft.market == .hongKong ? "计划买入价（港币/股）" : "计划买入价（人民币/股）",
+                      placeholder: "例如 168.10", text: $draft.entryText)
+            textInput("计划买入股数（选填）", placeholder: "输入股数后计算本笔金额与风险",
+                      text: $draft.enteredQuantityText)
         }
         .panel()
     }
@@ -206,7 +189,7 @@ struct CalculatorView: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("止损", icon: "arrow.down.right", tint: danger)
             HStack(spacing: 10) {
-                textInput("止损价格", placeholder: "输入价格", text: stopPriceBinding)
+                textInput(draft.market == .hongKong ? "止损价（HKD）" : "止损价（CNY）", placeholder: "输入价格", text: stopPriceBinding)
                 textInput("亏损比例 %", placeholder: "输入百分比", text: stopPercentBinding)
             }
             Slider(value: stopSliderValue, in: 0.5...40, step: 0.5)
@@ -229,7 +212,7 @@ struct CalculatorView: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("止盈", icon: "arrow.up.right", tint: success)
             HStack(spacing: 10) {
-                textInput("止盈价格", placeholder: "输入价格", text: targetPriceBinding)
+                textInput(draft.market == .hongKong ? "止盈价（HKD）" : "止盈价（CNY）", placeholder: "输入价格", text: targetPriceBinding)
                 textInput("盈利比例 %", placeholder: "输入百分比", text: targetPercentBinding)
             }
             Slider(value: targetSliderValue, in: 1...100, step: 1)
@@ -249,18 +232,18 @@ struct CalculatorView: View {
     }
 
     private func outcomeCard(_ value: TradeCalculation) -> some View {
-        VStack(alignment: .leading, spacing: 13) {
+        VStack(alignment: .leading, spacing: 11) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
                     fieldLabel("预期盈亏比")
                     Text("\(DecimalText.display(value.rewardRiskRatio)) R")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .font(.system(size: 29, weight: .bold, design: .rounded))
                         .foregroundColor(success)
                         .monospacedDigit()
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 4) {
-                    fieldLabel("理论盈亏平衡胜率")
+                    fieldLabel("盈亏平衡胜率（理论）")
                     Text("\(DecimalText.display(value.breakEvenWinRate))%")
                         .font(.system(size: 17, weight: .semibold, design: .rounded))
                         .monospacedDigit()
@@ -269,111 +252,117 @@ struct CalculatorView: View {
             GeometryReader { geom in
                 HStack(spacing: 4) {
                     Capsule().fill(danger)
-                        .frame(width: max(4, (geom.size.width - 4) / (1 + min(max(decimalDouble(value.rewardRiskRatio), 0.01), 100))))
+                        .frame(width: max(4, (geom.size.width - 4) /
+                                          (1 + min(max(decimalDouble(value.rewardRiskRatio), 0.01), 100))))
                     Capsule().fill(success)
                 }
             }
             .frame(height: 7)
-
-            if let actualLoss = value.enteredLoss, let actualGain = value.enteredGain {
-                HStack(spacing: 12) {
-                    outcomeAmount("计划止损亏损", amount: "−\(DecimalText.display(actualLoss))",
-                                  color: danger)
-                    outcomeAmount("计划止盈盈利", amount: "+\(DecimalText.display(actualGain))",
-                                  color: success)
-                }
-                Divider()
+            if let gain = value.enteredGain {
                 HStack {
-                    Text("本笔交易风险占总本金")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    fieldLabel("到达止盈价的计划盈利（人民币）")
                     Spacer()
-                    if let riskPct = value.enteredRiskPercentOfCapital {
-                        Text("\(DecimalText.display(riskPct, places: 3))%")
-                            .font(.headline.monospacedDigit())
-                            .foregroundColor(value.exceedsRiskBudget == true ? danger : .primary)
-                    } else {
-                        Text("请在风险设置填写总本金").font(.caption)
-                    }
-                }
-                if value.exceedsRiskBudget == true {
-                    Label("超过单笔风险预算，请调整股数或止损位置", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundColor(danger).font(.caption)
-                }
-                if value.exceedsCapital == true {
-                    Label("计划买入金额超过所填总本金", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundColor(danger).font(.caption)
-                }
-                if let quantity = value.enteredQuantity,
-                   let lot = Int(draft.lotSizeText), lot > 1, quantity % lot != 0 {
-                    Text("提醒：计划股数不是 \(lot) 的整倍数，请核对交易单位。")
-                        .foregroundColor(.orange).font(.caption)
-                }
-            } else {
-                Text("在“买入股数”中填入数量，即可计算本笔计划的盈亏金额及本金风险。")
-                    .foregroundColor(.secondary)
-                    .font(.callout)
-                if let suggested = value.suggestedQuantity {
-                    HStack {
-                        Text("按当前预算参考买入")
-                        Spacer()
-                        Text("\(suggested) 股").fontWeight(.semibold)
-                    }
-                    .font(.caption)
+                    Text("+¥\(DecimalText.display(gain))")
+                        .foregroundColor(success)
+                        .font(.system(size: 19, weight: .bold, design: .rounded))
+                        .monospacedDigit()
                 }
             }
         }
         .padding(15)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(cobalt.opacity(0.065))
-                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(cobalt.opacity(0.15)))
-        )
+        .background(RoundedRectangle(cornerRadius: 14).fill(cobalt.opacity(0.065)))
     }
 
     private var riskSettings: some View {
-        DisclosureGroup {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    textInput("总本金（\(draft.currencyCode)）",
-                              placeholder: "1500000", text: $draft.capitalText)
-                    textInput("单笔风险预算 %", placeholder: "1", text: $draft.riskText)
-                    textInput("每手股数", placeholder: "100", text: $draft.lotSizeText)
-                }
-                if let value = result {
-                    HStack(spacing: 12) {
-                        compactMetric("风险预算上限",
-                                      value.riskBudget.map { DecimalText.display($0) } ?? "—")
-                        compactMetric("预算建议股数",
-                                      value.suggestedQuantity.map { "\($0) 股" } ?? "—")
-                    }
-                    if let cost = value.enteredCost {
-                        HStack {
-                            Text("本笔占用资金")
-                            Spacer()
-                            Text("\(DecimalText.display(cost)) \(draft.currencyCode)")
-                                .fontWeight(.semibold)
-                        }
-                        if let ratio = value.enteredPositionPercentOfCapital {
-                            HStack {
-                                Text("占账户资金")
-                                Spacer()
-                                Text("\(DecimalText.display(ratio, places: 2))%").fontWeight(.semibold)
-                            }
-                        }
-                    }
-                }
-                Text("总本金与股票金额按同一币种计算，不自动换汇；实际止损可能因跳空或滑点超出预算。")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("本笔仓位与风险（人民币）",
+                         icon: "shield.lefthalf.filled", tint: cobalt)
+            HStack(spacing: 10) {
+                textInput("总本金（CNY）", placeholder: "1500000", text: $draft.capitalText)
+                textInput("单笔风险上限（%）", placeholder: "1", text: $draft.riskText)
             }
-            .padding(.top, 8)
-        } label: {
-            Label("仓位与风险设置", systemImage: "shield.lefthalf.filled")
-                .font(.subheadline.weight(.semibold))
+            if let value = result {
+                HStack(spacing: 11) {
+                    positionMetric("本笔买入金额", value.enteredCost.map { "¥" + DecimalText.display($0) } ?? "—",
+                                   tint: .primary)
+                    positionMetric("占总本金比例", value.enteredPositionPercentOfCapital.map {
+                        DecimalText.display($0, places: 3) + "%"
+                    } ?? "—", tint: .primary)
+                }
+                HStack(spacing: 11) {
+                    positionMetric("到止损价的亏损", value.enteredLoss.map {
+                        "−¥" + DecimalText.display($0)
+                    } ?? "—", tint: danger)
+                    positionMetric("本笔本金风险", value.enteredRiskPercentOfCapital.map {
+                        DecimalText.display($0, places: 3) + "%"
+                    } ?? "—", tint: value.exceedsRiskBudget == true ? danger : .primary)
+                }
+                if value.enteredQuantity == nil {
+                    Label("填写上面的买入股数，即时计算本笔金额和风险占比",
+                          systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                if value.exceedsRiskBudget == true {
+                    Label("本笔止损亏损超过风险预算", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundColor(danger)
+                }
+                if value.exceedsCapital == true {
+                    Label("本笔买入金额超过总本金", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundColor(danger)
+                }
+                if let qty = value.enteredQuantity,
+                   let lot = Int(draft.lotSizeText), lot > 1, qty % lot != 0 {
+                    Text("注意：买入股数不是每手 \(lot) 股的整倍数")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+            }
+            DisclosureGroup("参考仓位与交易单位") {
+                HStack(spacing: 10) {
+                    textInput("每手股数", placeholder: "100", text: $draft.lotSizeText)
+                    if let value = result {
+                        VStack(alignment: .leading, spacing: 5) {
+                            fieldLabel("按风险预算建议股数")
+                            Text(value.suggestedQuantity.map { "\($0) 股" } ?? "—")
+                                .font(.callout.weight(.semibold))
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                if let budget = result?.riskBudget {
+                    Text("单笔风险预算：¥\(DecimalText.display(budget))；仅供计划参考。")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .font(.caption.weight(.medium))
+            Text(draft.market == .hongKong ?
+                 "港股按设置的 HKD→CNY 固定汇率估算；不含结算汇差、手续费、印花税和滑点。" :
+                 "A 股金额与风险均为人民币；未计佣金、税费、跳空和滑点。")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(13)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
+        .panel()
+    }
+
+    private func positionMetric(_ name: String, _ amount: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            fieldLabel(name)
+            Text(amount)
+                .font(.system(size: 19, weight: .bold, design: .rounded))
+                .foregroundColor(tint)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10)
+            .fill(Color(nsColor: .windowBackgroundColor).opacity(0.8)))
     }
 
     private func sectionTitle(_ name: String, icon: String, tint: Color = .primary) -> some View {

@@ -46,10 +46,14 @@ enum PlanStatus: String, CaseIterable, Identifiable {
 }
 
 struct TradeDraft {
+    /// Published PBOC/CFETS central parity for 2026-11-12: CNY 85.633 per 100 HKD.
+    static let defaultHKDToCNY = "0.85633"
+    static let referenceRateDate = "2026-11-12"
     var symbol = ""
     var companyName = ""
     var market: TradeMarket = .chinaA
     var currencyCode = "CNY"
+    var hkdToCnyText = TradeDraft.defaultHKDToCNY
     var entryText = "100"
     var stopMode: PriceInputMode = .percentage
     var stopText = "5"
@@ -96,6 +100,15 @@ struct TradeDraft {
             }
             enteredQuantity = qty
         }
+        let fx: Decimal
+        if market == .hongKong {
+            guard let rate = DecimalText.parse(hkdToCnyText), rate > 0 else {
+                throw TradeCalculationError.invalidExchangeRate
+            }
+            fx = rate
+        } else {
+            fx = 1
+        }
         return TradeCalculationInput(
             entryPrice: entry,
             stopInput: stop,
@@ -105,7 +118,8 @@ struct TradeDraft {
             accountCapital: capital,
             riskPercentage: risk,
             lotSize: lotSize,
-            enteredQuantity: enteredQuantity
+            enteredQuantity: enteredQuantity,
+            priceToCNYRate: fx
         )
     }
 
@@ -116,6 +130,7 @@ struct TradeDraft {
         companyName = plan.companyName
         market = TradeMarket(rawValue: plan.marketRaw) ?? .other
         currencyCode = plan.currencyCode
+        hkdToCnyText = plan.hkdToCnyText ?? TradeDraft.defaultHKDToCNY
         entryText = plan.entryText
         stopMode = PriceInputMode(rawValue: plan.stopModeRaw) ?? .percentage
         stopText = plan.stopInputText
@@ -136,6 +151,8 @@ struct TradePlan: Identifiable, Codable {
     var companyName: String
     var marketRaw: String
     var currencyCode: String
+    /// Optional to preserve decoding of older JSON records. Nil HKD = legacy unconverted amounts.
+    var hkdToCnyText: String?
 
     // Store original editable inputs and also a frozen snapshot of derived values.
     // Decimal text is persisted losslessly instead of rounded display doubles.
@@ -174,6 +191,7 @@ struct TradePlan: Identifiable, Codable {
         companyName = ""
         marketRaw = ""
         currencyCode = ""
+        hkdToCnyText = nil
         entryText = ""
         stopModeRaw = ""
         stopInputText = ""
@@ -207,6 +225,7 @@ struct TradePlan: Identifiable, Codable {
         companyName = draft.companyName.trimmingCharacters(in: .whitespacesAndNewlines)
         marketRaw = draft.market.rawValue
         currencyCode = draft.currencyCode
+        hkdToCnyText = draft.market == .hongKong ? DecimalText.exact(calculation.priceToCNYRate) : nil
         entryText = DecimalText.exact(calculation.entryPrice)
         stopModeRaw = draft.stopMode.rawValue
         stopInputText = draft.stopText
@@ -231,6 +250,13 @@ struct TradePlan: Identifiable, Codable {
         statusRaw = draft.status.rawValue
         notes = draft.notes
         updatedAt = .now
+    }
+
+    var settlementCurrency: String {
+        if marketRaw == TradeMarket.hongKong.rawValue {
+            return hkdToCnyText == nil ? "HKD（旧版）" : "CNY"
+        }
+        return marketRaw == TradeMarket.chinaA.rawValue ? "CNY" : currencyCode
     }
 
     var displayName: String {
