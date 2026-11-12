@@ -1,12 +1,11 @@
 import Foundation
 import SwiftUI
-import SwiftData
 import UniformTypeIdentifiers
 
 struct HistoryView: View {
-    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var store: PlanStore
     @Environment(\.openWindow) private var openWindow
-    @Query(sort: \TradePlan.updatedAt, order: .reverse) private var plans: [TradePlan]
+    private var plans: [TradePlan] { store.plans }
 
     @State private var searchText = ""
     @State private var selectedID: UUID?
@@ -42,6 +41,12 @@ struct HistoryView: View {
                 }
                 .padding([.top, .horizontal], 12)
 
+                if let loadError = store.loadError {
+                    Text(loadError)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                        .padding(.horizontal, 12)
+                }
                 List(selection: $selectedID) {
                     ForEach(filteredPlans) { plan in
                         HStack {
@@ -131,11 +136,15 @@ struct HistoryView: View {
                 }
                 .navigationTitle("计划详情")
             } else {
-                ContentUnavailableView(
-                    "选择一条交易计划",
-                    systemImage: "tray.full",
-                    description: Text("在左侧查看历史记录；新计划从菜单栏图标创建。")
-                )
+                VStack(spacing: 12) {
+                    Image(systemName: "tray.full")
+                        .font(.system(size: 42))
+                        .foregroundStyle(.secondary)
+                    Text("选择一条交易计划").font(.title2.bold())
+                    Text("在左侧查看历史记录；新计划从菜单栏图标创建。")
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .confirmationDialog("确定删除此计划？", isPresented: $showDeleteConfirmation) {
@@ -173,13 +182,10 @@ struct HistoryView: View {
 
     private func deleteSelected() {
         guard let plan = selectedPlan else { return }
-        let formerID = plan.id
-        modelContext.delete(plan)
         do {
-            try modelContext.save()
-            if selectedID == formerID { selectedID = nil }
+            try store.delete(id: plan.id)
+            selectedID = nil
         } catch {
-            modelContext.rollback()
             present("删除失败：\(error.localizedDescription)")
         }
     }

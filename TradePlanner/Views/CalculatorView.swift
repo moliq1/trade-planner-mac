@@ -1,15 +1,14 @@
 import Foundation
 import SwiftUI
-import SwiftData
 
 struct CalculatorView: View {
     let planID: UUID?
     let compact: Bool
 
-    @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var store: PlanStore
     @Environment(\.openWindow) private var openWindow
     @State private var draft = TradeDraft()
-    @State private var editingPlan: TradePlan?
+    @State private var editingPlanID: UUID?
     @State private var message = ""
     @State private var showMessage = false
 
@@ -25,7 +24,7 @@ struct CalculatorView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "chart.xyaxis.line")
                         .foregroundStyle(.tint)
-                    Text(editingPlan == nil ? "新建交易计划" : "编辑交易计划")
+                    Text(editingPlanID == nil ? "新建交易计划" : "编辑交易计划")
                         .font(.title3.bold())
                     Spacer()
                     Button {
@@ -50,7 +49,7 @@ struct CalculatorView: View {
                         }
                         .labelsHidden()
                         .frame(maxWidth: .infinity)
-                        .onChange(of: draft.market) { _, market in
+                        .onChange(of: draft.market) { market in
                             draft.currencyCode = market.defaultCurrency
                             draft.lotSizeText = market.defaultLotSize
                         }
@@ -180,14 +179,14 @@ struct CalculatorView: View {
                     Button {
                         savePlan()
                     } label: {
-                        Label(editingPlan == nil ? "保存计划" : "保存修改", systemImage: "square.and.arrow.down")
+                        Label(editingPlanID == nil ? "保存计划" : "保存修改", systemImage: "square.and.arrow.down")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(result == nil)
 
                     Button("清空") {
-                        editingPlan = nil
+                        editingPlanID = nil
                         draft = TradeDraft()
                     }
                     .buttonStyle(.bordered)
@@ -263,15 +262,12 @@ struct CalculatorView: View {
 
     private func loadPlan() {
         guard let id = planID else { return }
-        do {
-            let descriptor = FetchDescriptor<TradePlan>(predicate: #Predicate { $0.id == id })
-            if let plan = try modelContext.fetch(descriptor).first {
-                editingPlan = plan
-                draft = TradeDraft(from: plan)
-            }
-        } catch {
-            present("读取计划失败：\(error.localizedDescription)")
+        guard let plan = store.plans.first(where: { $0.id == id }) else {
+            present("该计划不存在或已删除。")
+            return
         }
+        editingPlanID = plan.id
+        draft = TradeDraft(from: plan)
     }
 
     private func savePlan() {
@@ -282,14 +278,9 @@ struct CalculatorView: View {
         }
         do {
             let calculation = try TradeCalculator.calculate(draft.calculationInput())
-            if let editingPlan {
-                editingPlan.apply(draft: draft, calculation: calculation)
-            } else {
-                let plan = TradePlan(draft: draft, calculation: calculation)
-                modelContext.insert(plan)
-                editingPlan = plan
-            }
-            try modelContext.save()
+            editingPlanID = try store.save(
+                draft: draft, calculation: calculation, editingID: editingPlanID
+            )
             present("交易计划已保存在这台 Mac 上。")
         } catch {
             present("保存失败：\(error.localizedDescription)")

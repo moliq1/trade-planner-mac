@@ -1,5 +1,4 @@
 import Foundation
-import SwiftData
 
 enum TradeMarket: String, CaseIterable, Identifiable {
     case chinaA
@@ -118,9 +117,8 @@ struct TradeDraft {
     }
 }
 
-@Model
-final class TradePlan {
-    @Attribute(.unique) var id: UUID
+struct TradePlan: Identifiable, Codable {
+    var id: UUID
     var symbol: String
     var companyName: String
     var marketRaw: String
@@ -180,7 +178,7 @@ final class TradePlan {
         apply(draft: draft, calculation: calculation)
     }
 
-    func apply(draft: TradeDraft, calculation: TradeCalculation) {
+    mutating func apply(draft: TradeDraft, calculation: TradeCalculation) {
         symbol = draft.symbol.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         companyName = draft.companyName.trimmingCharacters(in: .whitespacesAndNewlines)
         marketRaw = draft.market.rawValue

@@ -10,9 +10,11 @@
 		7A453E99977898B0353EC601 /* file:Core/TradeCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradeCalculator.swift; sourceTree = "<group>"; };
 		EA286D7363A792B84E4A4AD1 /* build:Core/TradeCalculator.swift */ = {isa = PBXBuildFile; fileRef = 7A453E99977898B0353EC601 /* TradeCalculator.swift */; };
 		410188F9DC6E499FEC68BCF6 /* group:Core */ = {isa = PBXGroup; children = (7A453E99977898B0353EC601 /* TradeCalculator.swift */); path = TradePlanner/Core; sourceTree = "<group>"; };
-		D9E72C1793318FE0C8FEA6FD /* file:Models/TradePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradePlan.swift; sourceTree = "<group>"; };
+		2AF4760CF281C3E54B042BE4 /* file:Models/PlanStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanStore.swift; sourceTree = "<group>"; };
+        D0C671D894DDABCE726AB031 /* build:Models/PlanStore.swift */ = {isa = PBXBuildFile; fileRef = 2AF4760CF281C3E54B042BE4 /* PlanStore.swift */; };
+        D9E72C1793318FE0C8FEA6FD /* file:Models/TradePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradePlan.swift; sourceTree = "<group>"; };
 		1FBDFB204B62781383B0410C /* build:Models/TradePlan.swift */ = {isa = PBXBuildFile; fileRef = D9E72C1793318FE0C8FEA6FD /* TradePlan.swift */; };
-		BF657CFE8769AAE6C0570C29 /* group:Models */ = {isa = PBXGroup; children = (D9E72C1793318FE0C8FEA6FD /* TradePlan.swift */); path = TradePlanner/Models; sourceTree = "<group>"; };
+		BF657CFE8769AAE6C0570C29 /* group:Models */ = {isa = PBXGroup; children = (D9E72C1793318FE0C8FEA6FD /* TradePlan.swift */, 2AF4760CF281C3E54B042BE4 /* PlanStore.swift */); path = TradePlanner/Models; sourceTree = "<group>"; };
 		1189676B59AB7EE5ADE96590 /* file:Views/CalculatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalculatorView.swift; sourceTree = "<group>"; };
 		A2166971088BD4B958D3BFF5 /* build:Views/CalculatorView.swift */ = {isa = PBXBuildFile; fileRef = 1189676B59AB7EE5ADE96590 /* CalculatorView.swift */; };
 		9AC65BE7FB08118F36E66762 /* file:Views/HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
@@ -21,12 +23,12 @@
 		294174BE4BF2511F5691ABCD /* app_ref */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TradePlanner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FBDC4F23F93125BBEEAE800C /* products */ = {isa = PBXGroup; children = (294174BE4BF2511F5691ABCD /* TradePlanner.app */); name = Products; sourceTree = "<group>"; };
 		DC76E9F0C0006E8F919E0C51 /* root */ = {isa = PBXGroup; children = (1C48CE29E4E135EE62951B22 /* App */, 410188F9DC6E499FEC68BCF6 /* Core */, BF657CFE8769AAE6C0570C29 /* Models */, 58492F208780FA5EF3807E8F /* Views */, FBDC4F23F93125BBEEAE800C /* Products */); sourceTree = "<group>"; };
-		BCE16DD0260827ECF338C787 /* sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (C3FA157B5E285153D8CEAEA4 /* TradePlannerApp.swift in Sources */, EA286D7363A792B84E4A4AD1 /* TradeCalculator.swift in Sources */, 1FBDFB204B62781383B0410C /* TradePlan.swift in Sources */, A2166971088BD4B958D3BFF5 /* CalculatorView.swift in Sources */, C1E2164D90008EB1DE88273A /* HistoryView.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
+		BCE16DD0260827ECF338C787 /* sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (C3FA157B5E285153D8CEAEA4 /* TradePlannerApp.swift in Sources */, EA286D7363A792B84E4A4AD1 /* TradeCalculator.swift in Sources */, 1FBDFB204B62781383B0410C /* TradePlan.swift in Sources */, D0C671D894DDABCE726AB031 /* PlanStore.swift in Sources */, A2166971088BD4B958D3BFF5 /* CalculatorView.swift in Sources */, C1E2164D90008EB1DE88273A /* HistoryView.swift in Sources */); runOnlyForDeploymentPostprocessing = 0; };
 		7561BFB015D8F536760CB671 /* frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		0189424A5A60FED329FA868E /* resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		0E8A3AD980EC179856012B7E /* target */ = {isa = PBXNativeTarget; buildConfigurationList = B440910B32010914D0155F83; buildPhases = (BCE16DD0260827ECF338C787, 7561BFB015D8F536760CB671, 0189424A5A60FED329FA868E); buildRules = (); dependencies = (); name = TradePlanner; productName = TradePlanner; productReference = 294174BE4BF2511F5691ABCD; productType = "com.apple.product-type.application"; };
 		98F54143AB4E86B28C3AFEE0 /* project */ = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1600; TargetAttributes = {0E8A3AD980EC179856012B7E = {CreatedOnToolsVersion = 16.0; }; }; }; buildConfigurationList = 831D5D50E3DCCA5F3B08F657; compatibilityVersion = "Xcode 15.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = DC76E9F0C0006E8F919E0C51; productRefGroup = FBDC4F23F93125BBEEAE800C; projectDirPath = ""; projectRoot = ""; targets = (0E8A3AD980EC179856012B7E); };
-		7B076E8D2DAB75A6E86674D2 /* project_Debug */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 14.0; SWIFT_VERSION = 5.0; }; name = Debug; };
+		7B076E8D2DAB75A6E86674D2 /* project_Debug */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 13.0; SWIFT_VERSION = 5.0; }; name = Debug; };
 		B6D52EA6792462DCC920653C /* target_Debug */ = {isa = XCBuildConfiguration; buildSettings = {
         ALWAYS_SEARCH_USER_PATHS = NO;
         CODE_SIGN_STYLE = Automatic;
@@ -35,7 +37,7 @@
         GENERATE_INFOPLIST_FILE = YES;
         INFOPLIST_KEY_CFBundleDisplayName = "交易计划助手";
         INFOPLIST_KEY_LSUIElement = YES;
-        MACOSX_DEPLOYMENT_TARGET = 14.0;
+        MACOSX_DEPLOYMENT_TARGET = 13.0;
         MARKETING_VERSION = 1.0;
         PRODUCT_BUNDLE_IDENTIFIER = dev.moliq1.tradeplanner;
         PRODUCT_NAME = "$(TARGET_NAME)";
@@ -45,7 +47,7 @@
         SWIFT_VERSION = 5.0;
         SWIFT_OPTIMIZATION_LEVEL = "-Onone";
     }; name = Debug; };
-		2D2562DD160FB8D9EFD55D57 /* project_Release */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 14.0; SWIFT_VERSION = 5.0; }; name = Release; };
+		2D2562DD160FB8D9EFD55D57 /* project_Release */ = {isa = XCBuildConfiguration; buildSettings = { CLANG_ENABLE_MODULES = YES; SDKROOT = macosx; MACOSX_DEPLOYMENT_TARGET = 13.0; SWIFT_VERSION = 5.0; }; name = Release; };
 		9C49687187A4E9784E83304B /* target_Release */ = {isa = XCBuildConfiguration; buildSettings = {
         ALWAYS_SEARCH_USER_PATHS = NO;
         CODE_SIGN_STYLE = Automatic;
@@ -54,7 +56,7 @@
         GENERATE_INFOPLIST_FILE = YES;
         INFOPLIST_KEY_CFBundleDisplayName = "交易计划助手";
         INFOPLIST_KEY_LSUIElement = YES;
-        MACOSX_DEPLOYMENT_TARGET = 14.0;
+        MACOSX_DEPLOYMENT_TARGET = 13.0;
         MARKETING_VERSION = 1.0;
         PRODUCT_BUNDLE_IDENTIFIER = dev.moliq1.tradeplanner;
         PRODUCT_NAME = "$(TARGET_NAME)";

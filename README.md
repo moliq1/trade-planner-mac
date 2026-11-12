@@ -1,6 +1,6 @@
 # 交易计划助手（Trade Planner for Mac）
 
-一个完全离线的 **macOS 14+ 原生菜单栏应用**，用于股票做多交易的计划计算与保存。源代码基于 SwiftUI + SwiftData，计算核心使用 Swift Decimal。
+一个完全离线的 **macOS 13+ 原生菜单栏应用**，用于股票做多交易的计划计算与保存。源代码基于 SwiftUI + JSON 原子写入，计算核心使用 Swift Decimal。
 
 ## 功能
 
@@ -9,19 +9,19 @@
 - 预期收益/风险比 R 与理论盈亏平衡胜率
 - 账户资金、单笔风险预算、每手股数，计算计划数量和理论盈亏金额
 - A 股、港股、美股及其他市场，不同币种只作标签、不自动换汇
-- SwiftData 本地保存、搜索、编辑、删除历史交易计划，CSV 导出
+- JSON 原子写入 本地保存、搜索、编辑、删除历史交易计划，CSV 导出
 - 菜单栏快捷弹窗、历史管理窗口，适配系统深色/浅色外观
 - 无需行情 API、证券账号、服务器或网络连接
 
 ## 最方便的安装方式（不需要在 Mac 安装 Xcode）
 
-最低系统要求：**macOS 14 Sonoma**。
+最低系统要求：**macOS 13 Ventura**（包括 macOS 13.5，Intel 和 Apple Silicon 双架构）。
 
 1. 打开 [Actions 页面](https://github.com/moliq1/trade-planner-mac/actions)。
 2. 选择 **macOS build and core tests**，进入最新一条显示绿色勾号的构建；需要时也可以点 **Run workflow** 手动构建。
-3. 到运行详情页底部的 **Artifacts** 区域下载 \`TradePlanner-macOS\`。
-4. 解压下载的 ZIP 后，里面会有第二个 \`TradePlanner-macOS-unsigned.zip\`；再次解压得到 \`TradePlanner.app\`。
-5. 将 \`TradePlanner.app\` 拖到「应用程序」目录并打开；它默认只显示在**屏幕顶部菜单栏**，不会显示在 Dock。点击走势图图标就能计算、保存和访问历史计划。
+3. 到运行详情页底部的 **Artifacts** 区域下载 `TradePlanner-macOS`。
+4. 解压下载的 ZIP 后，里面会有第二个 `TradePlanner-macOS-unsigned.zip`；再次解压得到 `TradePlanner.app`。
+5. 将 `TradePlanner.app` 拖到「应用程序」目录并打开；它默认只显示在**屏幕顶部菜单栏**，不会显示在 Dock。点击走势图图标就能计算、保存和访问历史计划。
 
 **提示：** 这是在你自己的 GitHub Actions macOS runner 上编译的**非正式签名/未公证**测试包，并非经过 Apple 审核的正式发行版。macOS 可能阻止首次打开：如果你已确认 ZIP 来自自己仓库的成功构建并愿意承担风险，尝试打开应用后，到「系统设置 → 隐私与安全性 → 仍要打开（Open Anyway）」为它授权。**不要关闭系统级 Gatekeeper 或安装来源安全检查。** 如果 macOS 报告应用已损坏或发现恶意软件，不要强行绕过。
 
@@ -29,39 +29,43 @@ Actions 测试包默认只保留 30 天；这是测试渠道，不是正式发�
 
 ## 源码开发（需要 Xcode）
 
-Xcode 15+，打开 \`TradePlanner.xcodeproj\`，选择 \`TradePlanner\` Scheme 和 \`My Mac\`，按 \`⌘R\` 启动。仅为运行已编译好的 App **不需要本地 Xcode**。安装 Apple Command Line Tools 并不等于安装完整 Xcode：\`xcodebuild\` 必须通过完整 Xcode 提供。
+Xcode 15+，打开 `TradePlanner.xcodeproj`，选择 `TradePlanner` Scheme 和 `My Mac`，按 `⌘R` 启动。仅为运行已编译好的 App **不需要本地 Xcode**。安装 Apple Command Line Tools 并不等于安装完整 Xcode：`xcodebuild` 必须通过完整 Xcode 提供。
 
 纯计算核心测试可使用装有 Swift 5.9+ 的环境：
 
-\`\`\`bash
+```bash
 swift test
-\`\`\`
+```
 
-GitHub Actions 自动运行计算测试、\`xcodebuild\` Release 编译、使用 ad-hoc 临时签名并上传压缩 App。
+GitHub Actions 自动运行计算测试、验证 arm64 / x86_64 两种架构与 macOS 13.0 最低版本、`xcodebuild` Release 编译、使用 ad-hoc 临时签名并上传压缩 App。
 
 ## 计算口径
 
-本版仅支持股票**做多**且要求 \`0 < 止损价 < 买入价 < 止盈价\`。
+本版仅支持股票**做多**且要求 `0 < 止损价 < 买入价 < 止盈价`。
 
 | 指标 | 公式 |
 |---|---|
-| 亏损比例 | \`(买入价 - 止损价) / 买入价 × 100%\` |
-| 盈利比例 | \`(止盈价 - 买入价) / 买入价 × 100%\` |
-| 盈亏比 R | \`(止盈价 - 买入价) / (买入价 - 止损价)\` |
-| 理论盈亏平衡胜率 | \`1 / (1 + R)\`，未计费用 |
-| 资金风险预算 | \`账户资金 × 单笔最大风险比例\` |
-| 参考股数 | \`min(资金风险预算/每股风险, 账户资金/买入价)\`，再向下取整到可交易的每手数量 |
+| 亏损比例 | `(买入价 - 止损价) / 买入价 × 100%` |
+| 盈利比例 | `(止盈价 - 买入价) / 买入价 × 100%` |
+| 盈亏比 R | `(止盈价 - 买入价) / (买入价 - 止损价)` |
+| 理论盈亏平衡胜率 | `1 / (1 + R)`，未计费用 |
+| 资金风险预算 | `账户资金 × 单笔最大风险比例` |
+| 参考股数 | `min(资金风险预算/每股风险, 账户资金/买入价)`，再向下取整到可交易的每手数量 |
 
-**注意：** 不含手续费、税费、滑点、跳空、汇率转换；并不保证止损一定成交。A 股默认每手 100 股，港股不同标的每手数量不同，请手动调整。未输入仓位预算时，请同时清空资金和最大风险比例。历史记录保存在本机，删除应用数据前建议导出 CSV；CSV 暂不支持导回，修改历史计划会覆盖当前版本，不提供修改日志。
+**注意：** 不含手续费、税费、滑点、跳空、汇率转换；并不保证止损一定成交。A 股默认每手 100 股，港股不同标的每手数量不同，请手动调整。未输入仓位预算时，请同时清空资金和最大风险比例。历史记录保存在本机，删除应用数据前建议导出 CSV；CSV 暂不支持导回，修改历史计划会覆盖当前版本，不提供修改日志。本地数据文件位于 `~/Library/Application Support/TradePlanner/trade-plans.json`，另有上次保存前的 `.backup` 文件备份；数据损坏时不会自动以空数据覆盖。
 
 ## 代码结构
 
-- \`TradePlanner/App/TradePlannerApp.swift\` — 菜单栏应用生命周期
-- \`TradePlanner/Core/TradeCalculator.swift\` — 可独立测试的 Decimal 计算引擎
-- \`TradePlanner/Models/TradePlan.swift\` — SwiftData 数据模型和草稿
-- \`TradePlanner/Views/CalculatorView.swift\` — 计算器和保存界面
-- \`TradePlanner/Views/HistoryView.swift\` — 搜索、编辑、删除、CSV 导出
-- \`Tests/TradeCoreTests/\` — 计算逻辑单元测试
-- \`.github/workflows/ci.yml\` — GitHub Actions 构建、打包、上传测试版 App
+- `TradePlanner/App/TradePlannerApp.swift` — 菜单栏应用生命周期
+- `TradePlanner/Core/TradeCalculator.swift` — 可独立测试的 Decimal 计算引擎
+- `TradePlanner/Models/TradePlan.swift` — JSON 原子写入 数据模型和草稿
+- `TradePlanner/Views/CalculatorView.swift` — 计算器和保存界面
+- `TradePlanner/Views/HistoryView.swift` — 搜索、编辑、删除、CSV 导出
+- `Tests/TradeCoreTests/` — 计算逻辑单元测试
+- `.github/workflows/ci.yml` — GitHub Actions 构建、打包、上传测试版 App
 
 > 个人交易计划工具，不构成投资建议。
+
+## 系统兼容性
+
+本项目已从 SwiftData（macOS 14+）改为 macOS 13 可用的 Codable + JSON 本地存储，并移除了 macOS 14 专属的 `ContentUnavailableView` 和双参数 `onChange`。GitHub CI 可验证二进制部署目标为 13.0，但**尚未在一台真实的 macOS 13.5 设备上完成 GUI 运行验证**。

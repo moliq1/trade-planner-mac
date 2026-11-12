@@ -25,7 +25,18 @@ jobs:
             -destination 'generic/platform=macOS' \
             -derivedDataPath "$RUNNER_TEMP/TradePlannerDerivedData" \
             CODE_SIGNING_ALLOWED=NO \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
             build
+      - name: Verify macOS 13 minimum and Apple Silicon / Intel support
+        run: |
+          BIN="$RUNNER_TEMP/TradePlannerDerivedData/Build/Products/Release/TradePlanner.app/Contents/MacOS/TradePlanner"
+          test -f "$BIN"
+          xcrun lipo -verify_arch arm64 x86_64 "$BIN"
+          for arch in arm64 x86_64; do
+            xcrun vtool -show-build -arch "$arch" "$BIN" | tee "build-version-$arch.txt"
+            grep -Eq 'minos +13\.0' "build-version-$arch.txt"
+          done
       - name: Package runnable macOS application
         run: |
           APP="$RUNNER_TEMP/TradePlannerDerivedData/Build/Products/Release/TradePlanner.app"
