@@ -55,9 +55,10 @@ struct TradeDraft {
     var stopText = "5"
     var targetMode: PriceInputMode = .percentage
     var targetText = "15"
-    var capitalText = "100000"
+    var capitalText = "1500000"
     var riskText = "1"
     var lotSizeText = "100"
+    var enteredQuantityText = "" // Blank: do not infer a trade from recommended size.
     var status: PlanStatus = .planned
     var notes = ""
 
@@ -85,6 +86,16 @@ struct TradeDraft {
         if !capitalIsBlank && capital == nil { throw TradeCalculationError.invalidCapital }
         if !riskIsBlank && risk == nil { throw TradeCalculationError.invalidRiskPercentage }
 
+        let trimmedQuantity = enteredQuantityText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let enteredQuantity: Int?
+        if trimmedQuantity.isEmpty {
+            enteredQuantity = nil
+        } else {
+            guard let qty = Int(trimmedQuantity), qty > 0 else {
+                throw TradeCalculationError.invalidEnteredQuantity
+            }
+            enteredQuantity = qty
+        }
         return TradeCalculationInput(
             entryPrice: entry,
             stopInput: stop,
@@ -93,7 +104,8 @@ struct TradeDraft {
             targetMode: targetMode,
             accountCapital: capital,
             riskPercentage: risk,
-            lotSize: lotSize
+            lotSize: lotSize,
+            enteredQuantity: enteredQuantity
         )
     }
 
@@ -112,6 +124,7 @@ struct TradeDraft {
         capitalText = plan.capitalText
         riskText = plan.riskText
         lotSizeText = plan.lotSizeText
+        enteredQuantityText = plan.enteredQuantity.map(String.init) ?? ""
         status = PlanStatus(rawValue: plan.statusRaw) ?? .planned
         notes = plan.notes
     }
@@ -143,6 +156,12 @@ struct TradePlan: Identifiable, Codable {
     var quantity: Int?
     var plannedLossText: String?
     var plannedGainText: String?
+    // Optional for backward-compatible reading of JSON records saved before this update.
+    var enteredQuantity: Int?
+    var enteredCostText: String?
+    var enteredLossText: String?
+    var enteredGainText: String?
+    var riskAsCapitalPercentageText: String?
 
     var statusRaw: String
     var notes: String
@@ -171,6 +190,11 @@ struct TradePlan: Identifiable, Codable {
         quantity = nil
         plannedLossText = nil
         plannedGainText = nil
+        enteredQuantity = nil
+        enteredCostText = nil
+        enteredLossText = nil
+        enteredGainText = nil
+        riskAsCapitalPercentageText = nil
         statusRaw = ""
         notes = ""
         createdAt = .now
@@ -199,6 +223,11 @@ struct TradePlan: Identifiable, Codable {
         quantity = calculation.suggestedQuantity
         plannedLossText = calculation.plannedLoss.map(DecimalText.exact)
         plannedGainText = calculation.plannedGain.map(DecimalText.exact)
+        enteredQuantity = calculation.enteredQuantity
+        enteredCostText = calculation.enteredCost.map(DecimalText.exact)
+        enteredLossText = calculation.enteredLoss.map(DecimalText.exact)
+        enteredGainText = calculation.enteredGain.map(DecimalText.exact)
+        riskAsCapitalPercentageText = calculation.enteredRiskPercentOfCapital.map(DecimalText.exact)
         statusRaw = draft.status.rawValue
         notes = draft.notes
         updatedAt = .now

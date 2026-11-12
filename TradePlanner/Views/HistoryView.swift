@@ -107,12 +107,24 @@ struct HistoryView: View {
                             summaryMetric("盈利比例", "+\(displayDecimal(plan.gainPercentageText))%")
                             summaryMetric("盈亏比", "\(displayDecimal(plan.ratioText)) R")
                         }
-                        if let quantity = plan.quantity {
+                        if let manual = plan.enteredQuantity {
                             Divider()
                             HStack(spacing: 18) {
-                                summaryMetric("参考数量", "\(quantity) 股")
-                                summaryMetric("计划亏损", plan.plannedLossText.map { "−\(displayDecimal($0))" } ?? "—")
-                                summaryMetric("计划盈利", plan.plannedGainText.map { "+\(displayDecimal($0))" } ?? "—")
+                                summaryMetric("计划买入股数", "\(manual) 股")
+                                summaryMetric("本笔止损亏损", plan.enteredLossText.map { "−\(displayDecimal($0))" } ?? "—")
+                                summaryMetric("本笔止盈盈利", plan.enteredGainText.map { "+\(displayDecimal($0))" } ?? "—")
+                            }
+                            HStack(spacing: 18) {
+                                summaryMetric("买入金额", plan.enteredCostText.map(displayDecimal) ?? "—")
+                                summaryMetric("占总本金风险", plan.riskAsCapitalPercentageText.map { "\(displayDecimal($0))%" } ?? "—")
+                            }
+                        }
+                        if let reference = plan.quantity {
+                            Divider()
+                            HStack(spacing: 18) {
+                                summaryMetric("预算参考股数", "\(reference) 股")
+                                summaryMetric("预算理论亏损", plan.plannedLossText.map { "−\(displayDecimal($0))" } ?? "—")
+                                summaryMetric("预算理论盈利", plan.plannedGainText.map { "+\(displayDecimal($0))" } ?? "—")
                             }
                         }
                         Divider()
@@ -206,7 +218,8 @@ struct CSVDocument: FileDocument {
         let header = ["ID", "股票代码", "名称", "市场", "币种", "计划买入价", "止损价", "止盈价",
                       "亏损比例%", "盈利比例%", "收益风险比R", "参考股数", "计划亏损", "计划盈利",
                       "输入止损模式", "输入止损值", "输入止盈模式", "输入止盈值",
-                      "账户资金", "风险预算%", "每手股数", "状态", "备注", "创建时间", "更新时间"]
+                      "账户资金", "风险预算%", "每手股数", "状态", "备注", "创建时间", "更新时间",
+                      "计划买入股数", "本笔预计成本", "本笔止损亏损", "本笔止盈盈利", "本笔亏损占本金%"]
         let rows = plans.map { p in
             [p.id.uuidString, p.symbol, p.companyName, p.marketRaw, p.currencyCode,
              p.entryText, p.stopPriceText, p.targetPriceText,
@@ -215,7 +228,12 @@ struct CSVDocument: FileDocument {
              p.stopModeRaw, p.stopInputText, p.targetModeRaw, p.targetInputText,
              p.capitalText, p.riskText, p.lotSizeText, p.statusRaw, p.notes,
              ISO8601DateFormatter().string(from: p.createdAt),
-             ISO8601DateFormatter().string(from: p.updatedAt)]
+             ISO8601DateFormatter().string(from: p.updatedAt),
+             p.enteredQuantity.map(String.init) ?? "",
+             p.enteredCostText ?? "",
+             p.enteredLossText ?? "",
+             p.enteredGainText ?? "",
+             p.riskAsCapitalPercentageText ?? ""]
         }
         csv = ([header] + rows).map { $0.map(CSVDocument.escape).joined(separator: ",") }
             .joined(separator: "\r\n")

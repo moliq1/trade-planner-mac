@@ -86,4 +86,56 @@ final class TradeCalculatorTests: XCTestCase {
         XCTAssertNil(DecimalText.parse("1..2"))
         XCTAssertEqual(DecimalText.exact(Decimal(string: "28.4321")!), "28.4321")
     }
+
+    func testManualQuantityProfitLossAndCapitalRisk() throws {
+        let output = try TradeCalculator.calculate(.init(
+            entryPrice: 100, stopInput: 95, stopMode: .price,
+            targetInput: 115, targetMode: .price,
+            accountCapital: 1_500_000, riskPercentage: 1,
+            lotSize: 100, enteredQuantity: 2_000
+        ))
+        XCTAssertEqual(output.enteredQuantity, 2_000)
+        XCTAssertEqual(output.enteredCost, 200_000)
+        XCTAssertEqual(output.enteredLoss, 10_000)
+        XCTAssertEqual(output.enteredGain, 30_000)
+        XCTAssertEqual(NSDecimalNumber(decimal: output.enteredRiskPercentOfCapital ?? 0).doubleValue, 2.0 / 3.0, accuracy: 0.001)
+        XCTAssertEqual(output.exceedsRiskBudget, false)
+        XCTAssertEqual(output.exceedsCapital, false)
+        XCTAssertEqual(output.suggestedQuantity, 3_000) // separate from manual choice
+    }
+
+    func testManualQuantityOverRiskBudgetAndOverCapital() throws {
+        let output = try TradeCalculator.calculate(.init(
+            entryPrice: 100, stopInput: 90, stopMode: .price,
+            targetInput: 120, targetMode: .price,
+            accountCapital: 10_000, riskPercentage: 1, lotSize: 1,
+            enteredQuantity: 200
+        ))
+        XCTAssertEqual(output.enteredLoss, 2_000)
+        XCTAssertEqual(output.enteredGain, 4_000)
+        XCTAssertEqual(output.enteredRiskPercentOfCapital, 20)
+        XCTAssertEqual(output.exceedsRiskBudget, true)
+        XCTAssertEqual(output.exceedsCapital, true)
+    }
+
+    func testNoEnteredQuantityKeepsRecommendationOnly() throws {
+        let output = try TradeCalculator.calculate(.init(
+            entryPrice: 100, stopInput: 95, stopMode: .price,
+            targetInput: 115, targetMode: .price,
+            accountCapital: 1_500_000, riskPercentage: 1
+        ))
+        XCTAssertNil(output.enteredLoss)
+        XCTAssertNil(output.enteredGain)
+        XCTAssertNil(output.enteredRiskPercentOfCapital)
+        XCTAssertNotNil(output.suggestedQuantity)
+    }
+
+    func testRejectsInvalidManualQuantity() {
+        XCTAssertThrowsError(try TradeCalculator.calculate(.init(
+            entryPrice: 100, stopInput: 5, stopMode: .percentage,
+            targetInput: 15, targetMode: .percentage,
+            enteredQuantity: 0
+        ))) { XCTAssertEqual($0 as? TradeCalculationError, .invalidEnteredQuantity) }
+    }
+
 }

@@ -14,6 +14,8 @@ public struct TradeCalculationInput: Sendable {
     public var accountCapital: Decimal?
     public var riskPercentage: Decimal?
     public var lotSize: Int
+    /// Optional planned/entered quantity. Nil means risk-budget sizing only.
+    public var enteredQuantity: Int?
 
     public init(
         entryPrice: Decimal,
@@ -23,7 +25,8 @@ public struct TradeCalculationInput: Sendable {
         targetMode: PriceInputMode,
         accountCapital: Decimal? = nil,
         riskPercentage: Decimal? = nil,
-        lotSize: Int = 1
+        lotSize: Int = 1,
+        enteredQuantity: Int? = nil
     ) {
         self.entryPrice = entryPrice
         self.stopInput = stopInput
@@ -33,6 +36,7 @@ public struct TradeCalculationInput: Sendable {
         self.accountCapital = accountCapital
         self.riskPercentage = riskPercentage
         self.lotSize = lotSize
+        self.enteredQuantity = enteredQuantity
     }
 }
 
@@ -51,6 +55,14 @@ public struct TradeCalculation: Sendable {
     public let estimatedCost: Decimal?
     public let plannedLoss: Decimal?
     public let plannedGain: Decimal?
+    public let enteredQuantity: Int?
+    public let enteredCost: Decimal?
+    public let enteredLoss: Decimal?
+    public let enteredGain: Decimal?
+    public let enteredRiskPercentOfCapital: Decimal?
+    public let enteredPositionPercentOfCapital: Decimal?
+    public let exceedsRiskBudget: Bool?
+    public let exceedsCapital: Bool?
 }
 
 public enum TradeCalculationError: String, Error, LocalizedError, Equatable, Sendable {
@@ -61,6 +73,7 @@ public enum TradeCalculationError: String, Error, LocalizedError, Equatable, Sen
     case invalidRiskPercentage
     case invalidLotSize
     case excessiveQuantity
+    case invalidEnteredQuantity
 
     public var errorDescription: String? {
         switch self {
@@ -71,6 +84,7 @@ public enum TradeCalculationError: String, Error, LocalizedError, Equatable, Sen
         case .invalidRiskPercentage: return "单笔风险比例必须大于 0% 且不超过 100%。"
         case .invalidLotSize: return "每手股数必须是大于 0 的整数。"
         case .excessiveQuantity: return "计算出的股数过大，请检查参数。"
+        case .invalidEnteredQuantity: return "计划买入股数必须为正整数，且不能超过可计算范围。"
         }
     }
 }
@@ -81,6 +95,9 @@ public enum TradeCalculator {
         let entry = input.entryPrice
         guard entry > 0 else { throw TradeCalculationError.invalidEntry }
         guard input.lotSize > 0 else { throw TradeCalculationError.invalidLotSize }
+        if let entered = input.enteredQuantity {
+            guard entered > 0 else { throw TradeCalculationError.invalidEnteredQuantity }
+        }
 
         let stop: Decimal
         switch input.stopMode {
@@ -150,6 +167,28 @@ public enum TradeCalculator {
             gain = Decimal(shares) * rewardPerShare
         }
 
+        // Actual plan: calculated from the user-entered shares, never confused
+        // with the suggested quantity from the separate risk budget.
+        let enteredCost = input.enteredQuantity.map { Decimal($0) * entry }
+        let enteredLoss = input.enteredQuantity.map { Decimal($0) * riskPerShare }
+        let enteredGain = input.enteredQuantity.map { Decimal($0) * rewardPerShare }
+        let enteredCapitalPercent: Decimal?
+        let enteredPositionPercent: Decimal?
+        let aboveBudget: Bool?
+        let aboveCapital: Bool?
+        if let capital = input.accountCapital, capital > 0,
+           let actualCost = enteredCost, let actualLoss = enteredLoss {
+            enteredCapitalPercent = actualLoss / capital * 100
+            enteredPositionPercent = actualCost / capital * 100
+            aboveBudget = riskBudget.map { actualLoss > $0 }
+            aboveCapital = actualCost > capital
+        } else {
+            enteredCapitalPercent = nil
+            enteredPositionPercent = nil
+            aboveBudget = nil
+            aboveCapital = nil
+        }
+
         return TradeCalculation(
             entryPrice: entry,
             stopPrice: stop,
@@ -164,7 +203,15 @@ public enum TradeCalculator {
             suggestedQuantity: quantity,
             estimatedCost: cost,
             plannedLoss: loss,
-            plannedGain: gain
+            plannedGain: gain,
+            enteredQuantity: input.enteredQuantity,
+            enteredCost: enteredCost,
+            enteredLoss: enteredLoss,
+            enteredGain: enteredGain,
+            enteredRiskPercentOfCapital: enteredCapitalPercent,
+            enteredPositionPercentOfCapital: enteredPositionPercent,
+            exceedsRiskBudget: aboveBudget,
+            exceedsCapital: aboveCapital
         )
     }
 }

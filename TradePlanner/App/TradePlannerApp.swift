@@ -7,7 +7,7 @@ struct TradePlannerApp: App {
     var body: some Scene {
         MenuBarExtra("交易计划助手", systemImage: "chart.xyaxis.line") {
             CalculatorView(planID: nil, compact: true)
-                .frame(width: 440, height: 650)
+                .frame(width: 482, height: 720)
                 .environmentObject(store)
         }
         .menuBarExtraStyle(.window)
@@ -20,7 +20,7 @@ struct TradePlannerApp: App {
 
         WindowGroup("编辑交易计划", id: "editor", for: UUID.self) { $planID in
             CalculatorView(planID: planID, compact: false)
-                .frame(minWidth: 490, minHeight: 650)
+                .frame(minWidth: 520, minHeight: 720)
                 .environmentObject(store)
         }
 
