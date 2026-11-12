@@ -19,8 +19,8 @@ struct CalculatorView: View {
     @State private var message = ""
     @State private var showMessage = false
 
-    private let danger = Color(red: 0.83, green: 0.28, blue: 0.31)
-    private let success = Color(red: 0.12, green: 0.58, blue: 0.39)
+    private let profitColor = Color(red: 0.83, green: 0.28, blue: 0.31)
+    private let lossColor = Color(red: 0.12, green: 0.58, blue: 0.39)
     private let cobalt = Color(red: 0.19, green: 0.44, blue: 0.94)
 
     private var preview: Result<TradeCalculation, Error> {
@@ -37,8 +37,6 @@ struct CalculatorView: View {
                 stopCard
                 targetCard
 
-                riskSettings
-
                 if let result {
                     outcomeCard(result)
                 } else if case .failure(let error) = preview {
@@ -48,6 +46,8 @@ struct CalculatorView: View {
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+
+                riskSettings
 
                 HStack(spacing: 10) {
                     Text("状态").font(.caption).foregroundColor(.secondary)
@@ -187,13 +187,13 @@ struct CalculatorView: View {
 
     private var stopCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("止损", icon: "arrow.down.right", tint: danger)
+            sectionTitle("止损", icon: "arrow.down.right", tint: lossColor)
             HStack(spacing: 10) {
                 textInput(draft.market == .hongKong ? "止损价（HKD）" : "止损价（CNY）", placeholder: "输入价格", text: stopPriceBinding)
                 textInput("亏损比例 %", placeholder: "输入百分比", text: stopPercentBinding)
             }
             Slider(value: stopSliderValue, in: 0.5...40, step: 0.5)
-                .tint(danger)
+                .tint(lossColor)
                 .accessibilityLabel("止损百分比滑块")
             HStack {
                 Text("0.5%")
@@ -204,19 +204,21 @@ struct CalculatorView: View {
             }
             .font(.system(size: 10))
             .foregroundColor(.secondary)
+            Divider()
+            priceOutcome("止损后预计亏损", amount: result?.enteredLoss, isProfit: false)
         }
         .panel()
     }
 
     private var targetCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("止盈", icon: "arrow.up.right", tint: success)
+            sectionTitle("止盈", icon: "arrow.up.right", tint: profitColor)
             HStack(spacing: 10) {
                 textInput(draft.market == .hongKong ? "止盈价（HKD）" : "止盈价（CNY）", placeholder: "输入价格", text: targetPriceBinding)
                 textInput("盈利比例 %", placeholder: "输入百分比", text: targetPercentBinding)
             }
             Slider(value: targetSliderValue, in: 1...100, step: 1)
-                .tint(success)
+                .tint(profitColor)
                 .accessibilityLabel("止盈百分比滑块")
             HStack {
                 Text("1%")
@@ -227,6 +229,8 @@ struct CalculatorView: View {
             }
             .font(.system(size: 10))
             .foregroundColor(.secondary)
+            Divider()
+            priceOutcome("止盈后预计盈利", amount: result?.enteredGain, isProfit: true)
         }
         .panel()
     }
@@ -238,7 +242,7 @@ struct CalculatorView: View {
                     fieldLabel("预期盈亏比")
                     Text("\(DecimalText.display(value.rewardRiskRatio)) R")
                         .font(.system(size: 29, weight: .bold, design: .rounded))
-                        .foregroundColor(success)
+                        .foregroundColor(profitColor)
                         .monospacedDigit()
                 }
                 Spacer()
@@ -251,23 +255,13 @@ struct CalculatorView: View {
             }
             GeometryReader { geom in
                 HStack(spacing: 4) {
-                    Capsule().fill(danger)
+                    Capsule().fill(lossColor)
                         .frame(width: max(4, (geom.size.width - 4) /
                                           (1 + min(max(decimalDouble(value.rewardRiskRatio), 0.01), 100))))
-                    Capsule().fill(success)
+                    Capsule().fill(profitColor)
                 }
             }
             .frame(height: 7)
-            if let gain = value.enteredGain {
-                HStack {
-                    fieldLabel("到达止盈价的计划盈利（人民币）")
-                    Spacer()
-                    Text("+¥\(DecimalText.display(gain))")
-                        .foregroundColor(success)
-                        .font(.system(size: 19, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                }
-            }
         }
         .padding(15)
         .background(RoundedRectangle(cornerRadius: 14).fill(cobalt.opacity(0.065)))
@@ -292,10 +286,10 @@ struct CalculatorView: View {
                 HStack(spacing: 11) {
                     positionMetric("到止损价的亏损", value.enteredLoss.map {
                         "−¥" + DecimalText.display($0)
-                    } ?? "—", tint: danger)
+                    } ?? "—", tint: lossColor)
                     positionMetric("本笔本金风险", value.enteredRiskPercentOfCapital.map {
                         DecimalText.display($0, places: 3) + "%"
-                    } ?? "—", tint: value.exceedsRiskBudget == true ? danger : .primary)
+                    } ?? "—", tint: value.exceedsRiskBudget == true ? .orange : lossColor)
                 }
                 if value.enteredQuantity == nil {
                     Label("填写上面的买入股数，即时计算本笔金额和风险占比",
@@ -306,12 +300,12 @@ struct CalculatorView: View {
                 if value.exceedsRiskBudget == true {
                     Label("本笔止损亏损超过风险预算", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
-                        .foregroundColor(danger)
+                        .foregroundColor(.orange)
                 }
                 if value.exceedsCapital == true {
                     Label("本笔买入金额超过总本金", systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
-                        .foregroundColor(danger)
+                        .foregroundColor(.orange)
                 }
                 if let qty = value.enteredQuantity,
                    let lot = Int(draft.lotSizeText), lot > 1, qty % lot != 0 {
@@ -363,6 +357,27 @@ struct CalculatorView: View {
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 10)
             .fill(Color(nsColor: .windowBackgroundColor).opacity(0.8)))
+    }
+
+    // P&L cash is CNY, including HKD-quoted stocks converted by the core engine.
+    private func priceOutcome(_ title: String, amount: Decimal?, isProfit: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            fieldLabel(title + "（人民币）")
+            Spacer(minLength: 5)
+            if let amount = amount {
+                Text((isProfit ? "+¥" : "−¥") + DecimalText.display(amount))
+                    .foregroundColor(isProfit ? profitColor : lossColor)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            } else {
+                Text("填入买入股数后显示")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.top, 1)
     }
 
     private func sectionTitle(_ name: String, icon: String, tint: Color = .primary) -> some View {

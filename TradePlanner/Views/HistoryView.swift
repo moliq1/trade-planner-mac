@@ -62,7 +62,7 @@ struct HistoryView: View {
                             Spacer()
                             VStack(alignment: .trailing, spacing: 5) {
                                 Text("\(displayDecimal(plan.ratioText)) R")
-                                    .foregroundStyle(.green)
+                                    .foregroundStyle(.red)
                                     .font(.subheadline.bold())
                                 Text(plan.settlementCurrency)
                                     .font(.caption2)
@@ -99,13 +99,13 @@ struct HistoryView: View {
                         }
                         HStack(spacing: 18) {
                             summaryMetric("买入价", plan.entryText)
-                            summaryMetric("止损价", plan.stopPriceText)
-                            summaryMetric("止盈价", plan.targetPriceText)
+                            summaryMetric("止损价", plan.stopPriceText, color: .green)
+                            summaryMetric("止盈价", plan.targetPriceText, color: .red)
                         }
                         HStack(spacing: 18) {
-                            summaryMetric("止损比例", "−\(displayDecimal(plan.lossPercentageText))%")
-                            summaryMetric("盈利比例", "+\(displayDecimal(plan.gainPercentageText))%")
-                            summaryMetric("盈亏比", "\(displayDecimal(plan.ratioText)) R")
+                            summaryMetric("止损比例", "−\(displayDecimal(plan.lossPercentageText))%", color: .green)
+                            summaryMetric("盈利比例", "+\(displayDecimal(plan.gainPercentageText))%", color: .red)
+                            summaryMetric("盈亏比", "\(displayDecimal(plan.ratioText)) R", color: .red)
                         }
                         if plan.marketRaw == TradeMarket.hongKong.rawValue, let rate = plan.hkdToCnyText {
                             HStack {
@@ -119,8 +119,8 @@ struct HistoryView: View {
                             Divider()
                             HStack(spacing: 18) {
                                 summaryMetric("计划买入股数", "\(manual) 股")
-                                summaryMetric("本笔止损亏损（\(plan.settlementCurrency)）", plan.enteredLossText.map { "−\(displayDecimal($0))" } ?? "—")
-                                summaryMetric("本笔止盈盈利（\(plan.settlementCurrency)）", plan.enteredGainText.map { "+\(displayDecimal($0))" } ?? "—")
+                                summaryMetric("本笔止损亏损（\(plan.settlementCurrency)）", plan.enteredLossText.map { "−\(displayDecimal($0))" } ?? "—", color: .green)
+                                summaryMetric("本笔止盈盈利（\(plan.settlementCurrency)）", plan.enteredGainText.map { "+\(displayDecimal($0))" } ?? "—", color: .red)
                             }
                             HStack(spacing: 18) {
                                 summaryMetric("买入金额（\(plan.settlementCurrency)）", plan.enteredCostText.map(displayDecimal) ?? "—")
@@ -131,8 +131,8 @@ struct HistoryView: View {
                             Divider()
                             HStack(spacing: 18) {
                                 summaryMetric("预算参考股数", "\(reference) 股")
-                                summaryMetric("预算理论亏损（\(plan.settlementCurrency)）", plan.plannedLossText.map { "−\(displayDecimal($0))" } ?? "—")
-                                summaryMetric("预算理论盈利（\(plan.settlementCurrency)）", plan.plannedGainText.map { "+\(displayDecimal($0))" } ?? "—")
+                                summaryMetric("预算理论亏损（\(plan.settlementCurrency)）", plan.plannedLossText.map { "−\(displayDecimal($0))" } ?? "—", color: .green)
+                                summaryMetric("预算理论盈利（\(plan.settlementCurrency)）", plan.plannedGainText.map { "+\(displayDecimal($0))" } ?? "—", color: .red)
                             }
                         }
                         Divider()
@@ -187,10 +187,10 @@ struct HistoryView: View {
         } message: { Text(alertText) }
     }
 
-    private func summaryMetric(_ title: String, _ value: String) -> some View {
+    private func summaryMetric(_ title: String, _ value: String, color: Color = .primary) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.title3.bold()).monospacedDigit()
+            Text(value).font(.title3.bold()).monospacedDigit().foregroundColor(color)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
