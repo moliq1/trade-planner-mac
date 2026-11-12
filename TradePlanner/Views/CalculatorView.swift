@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AppKit
 
 /// Menu-bar calculator, macOS 13+. Price and percent fields are always visible.
 /// The last edited field is the source of truth, so editing entry price is predictable.
@@ -129,6 +130,14 @@ struct CalculatorView: View {
                 Label("历史", systemImage: "clock.arrow.circlepath")
             }
             .buttonStyle(.bordered)
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                Label("退出", systemImage: "power")
+            }
+            .buttonStyle(.bordered)
+            .help("退出 TradePlanner（快捷键 ⌘Q）")
+            .keyboardShortcut("q", modifiers: .command)
         }
         .padding(.bottom, 2)
     }
