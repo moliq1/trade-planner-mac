@@ -32,7 +32,7 @@ jobs:
         run: |
           BIN="$RUNNER_TEMP/TradePlannerDerivedData/Build/Products/Release/TradePlanner.app/Contents/MacOS/TradePlanner"
           test -f "$BIN"
-          xcrun lipo -verify_arch arm64 x86_64 "$BIN"
+          xcrun lipo "$BIN" -verify_arch arm64 x86_64
           for arch in arm64 x86_64; do
             xcrun vtool -show-build -arch "$arch" "$BIN" | tee "build-version-$arch.txt"
             grep -Eq 'minos +13\.0' "build-version-$arch.txt"
