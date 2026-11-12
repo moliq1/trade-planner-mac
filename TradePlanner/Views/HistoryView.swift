@@ -220,20 +220,31 @@ struct CSVDocument: FileDocument {
                       "输入止损模式", "输入止损值", "输入止盈模式", "输入止盈值",
                       "账户资金", "风险预算%", "每手股数", "状态", "备注", "创建时间", "更新时间",
                       "计划买入股数", "本笔预计成本", "本笔止损亏损", "本笔止盈盈利", "本笔亏损占本金%"]
-        let rows = plans.map { p in
-            [p.id.uuidString, p.symbol, p.companyName, p.marketRaw, p.currencyCode,
-             p.entryText, p.stopPriceText, p.targetPriceText,
-             p.lossPercentageText, p.gainPercentageText, p.ratioText,
-             p.quantity.map(String.init) ?? "", p.plannedLossText ?? "", p.plannedGainText ?? "",
-             p.stopModeRaw, p.stopInputText, p.targetModeRaw, p.targetInputText,
-             p.capitalText, p.riskText, p.lotSizeText, p.statusRaw, p.notes,
-             ISO8601DateFormatter().string(from: p.createdAt),
-             ISO8601DateFormatter().string(from: p.updatedAt),
-             p.enteredQuantity.map(String.init) ?? "",
-             p.enteredCostText ?? "",
-             p.enteredLossText ?? "",
-             p.enteredGainText ?? "",
-             p.riskAsCapitalPercentageText ?? ""]
+        // Deliberately construct the columns in small typed groups: Swift's
+        // type checker struggles with a giant heterogeneous optional expression.
+        let rows: [[String]] = plans.map { p -> [String] in
+            var fields: [String] = [
+                p.id.uuidString, p.symbol, p.companyName, p.marketRaw, p.currencyCode,
+                p.entryText, p.stopPriceText, p.targetPriceText
+            ]
+            fields.append(contentsOf: [
+                p.lossPercentageText, p.gainPercentageText, p.ratioText,
+                p.quantity.map { String($0) } ?? "",
+                p.plannedLossText ?? "", p.plannedGainText ?? ""
+            ])
+            fields.append(contentsOf: [
+                p.stopModeRaw, p.stopInputText, p.targetModeRaw, p.targetInputText,
+                p.capitalText, p.riskText, p.lotSizeText, p.statusRaw, p.notes
+            ])
+            let isoDate = ISO8601DateFormatter()
+            fields.append(isoDate.string(from: p.createdAt))
+            fields.append(isoDate.string(from: p.updatedAt))
+            fields.append(contentsOf: [
+                p.enteredQuantity.map { String($0) } ?? "",
+                p.enteredCostText ?? "", p.enteredLossText ?? "",
+                p.enteredGainText ?? "", p.riskAsCapitalPercentageText ?? ""
+            ])
+            return fields
         }
         csv = ([header] + rows).map { $0.map(CSVDocument.escape).joined(separator: ",") }
             .joined(separator: "\r\n")
