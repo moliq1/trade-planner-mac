@@ -98,9 +98,9 @@ struct HistoryView: View {
                             .help("删除计划")
                         }
                         HStack(spacing: 18) {
-                            summaryMetric("买入价", plan.entryText)
-                            summaryMetric("止损价", plan.stopPriceText, color: .green)
-                            summaryMetric("止盈价", plan.targetPriceText, color: .red)
+                            summaryMetric("买入价", displayPrice(plan.entryText))
+                            summaryMetric("止损价", displayPrice(plan.stopPriceText), color: .green)
+                            summaryMetric("止盈价", displayPrice(plan.targetPriceText), color: .red)
                         }
                         HStack(spacing: 18) {
                             summaryMetric("止损比例", "−\(displayDecimal(plan.lossPercentageText))%", color: .green)
@@ -119,20 +119,12 @@ struct HistoryView: View {
                             Divider()
                             HStack(spacing: 18) {
                                 summaryMetric("计划买入股数", "\(manual) 股")
-                                summaryMetric("本笔止损亏损（\(plan.settlementCurrency)）", plan.enteredLossText.map { "−\(displayDecimal($0))" } ?? "—", color: .green)
-                                summaryMetric("本笔止盈盈利（\(plan.settlementCurrency)）", plan.enteredGainText.map { "+\(displayDecimal($0))" } ?? "—", color: .red)
+                                summaryMetric("本笔止损亏损（\(plan.settlementCurrency)）", plan.enteredLossText.map { "−\(displayMoney($0))" } ?? "—", color: .green)
+                                summaryMetric("本笔止盈盈利（\(plan.settlementCurrency)）", plan.enteredGainText.map { "+\(displayMoney($0))" } ?? "—", color: .red)
                             }
                             HStack(spacing: 18) {
-                                summaryMetric("买入金额（\(plan.settlementCurrency)）", plan.enteredCostText.map(displayDecimal) ?? "—")
+                                summaryMetric("买入金额（\(plan.settlementCurrency)）", plan.enteredCostText.map(displayMoney) ?? "—")
                                 summaryMetric("占总本金风险", plan.riskAsCapitalPercentageText.map { "\(displayDecimal($0))%" } ?? "—")
-                            }
-                        }
-                        if let reference = plan.quantity {
-                            Divider()
-                            HStack(spacing: 18) {
-                                summaryMetric("预算参考股数", "\(reference) 股")
-                                summaryMetric("预算理论亏损（\(plan.settlementCurrency)）", plan.plannedLossText.map { "−\(displayDecimal($0))" } ?? "—", color: .green)
-                                summaryMetric("预算理论盈利（\(plan.settlementCurrency)）", plan.plannedGainText.map { "+\(displayDecimal($0))" } ?? "—", color: .red)
                             }
                         }
                         Divider()
@@ -197,7 +189,16 @@ struct HistoryView: View {
 
     private func displayDecimal(_ text: String) -> String {
         guard let number = DecimalText.parse(text) else { return text }
+        return DecimalText.display(number, places: 2)
+    }
+
+    private func displayPrice(_ text: String) -> String {
+        guard let number = DecimalText.parse(text) else { return text }
         return DecimalText.display(number, places: 4)
+    }
+
+    private func displayMoney(_ text: String) -> String {
+        HistoryMoneyFormatter.format(text, grouped: true)
     }
 
     private func deleteSelected() {
@@ -224,7 +225,7 @@ struct CSVDocument: FileDocument {
 
     init(plans: [TradePlan]) {
         let header = ["ID", "股票代码", "名称", "市场", "币种", "计划买入价", "止损价", "止盈价",
-                      "亏损比例%", "盈利比例%", "收益风险比R", "参考股数", "计划亏损", "计划盈利",
+                      "亏损比例%", "盈利比例%", "收益风险比R",
                       "输入止损模式", "输入止损值", "输入止盈模式", "输入止盈值",
                       "账户资金", "风险预算%", "每手股数", "状态", "备注", "创建时间", "更新时间",
                       "计划买入股数", "本笔预计成本", "本笔止损亏损", "本笔止盈盈利", "本笔亏损占本金%", "金额计价币种", "HKD兑CNY参考汇率"]
@@ -236,9 +237,7 @@ struct CSVDocument: FileDocument {
                 p.entryText, p.stopPriceText, p.targetPriceText
             ]
             fields.append(contentsOf: [
-                p.lossPercentageText, p.gainPercentageText, p.ratioText,
-                p.quantity.map { String($0) } ?? "",
-                p.plannedLossText ?? "", p.plannedGainText ?? ""
+                p.lossPercentageText, p.gainPercentageText, p.ratioText
             ])
             fields.append(contentsOf: [
                 p.stopModeRaw, p.stopInputText, p.targetModeRaw, p.targetInputText,
@@ -249,8 +248,11 @@ struct CSVDocument: FileDocument {
             fields.append(isoDate.string(from: p.updatedAt))
             fields.append(contentsOf: [
                 p.enteredQuantity.map { String($0) } ?? "",
-                p.enteredCostText ?? "", p.enteredLossText ?? "",
-                p.enteredGainText ?? "", p.riskAsCapitalPercentageText ?? "",
+                p.enteredCostText.map { HistoryMoneyFormatter.format($0, grouped: false) } ?? "",
+                p.enteredLossText.map { HistoryMoneyFormatter.format($0, grouped: false) } ?? "",
+                p.enteredGainText.map { HistoryMoneyFormatter.format($0, grouped: false) } ?? "",
+                p.riskAsCapitalPercentageText.flatMap { DecimalText.parse($0) }
+                    .map { DecimalText.display($0, places: 2) } ?? "",
                 p.settlementCurrency, p.hkdToCnyText ?? ""
             ])
             return fields
@@ -271,5 +273,22 @@ struct CSVDocument: FileDocument {
 
     private static func escape(_ string: String) -> String {
         "\"\(string.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+}
+
+
+// Rounded display only: the original JSON data stays at full Decimal precision.
+private enum HistoryMoneyFormatter {
+    static func format(_ raw: String, grouped: Bool) -> String {
+        guard let value = DecimalText.parse(raw) else { return raw }
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        formatter.usesGroupingSeparator = grouped
+        formatter.roundingMode = .halfUp
+        return formatter.string(from: NSDecimalNumber(decimal: value))
+            ?? DecimalText.display(value, places: 2)
     }
 }

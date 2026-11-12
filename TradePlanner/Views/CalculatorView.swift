@@ -9,6 +9,7 @@ struct CalculatorView: View {
     let compact: Bool
 
     @EnvironmentObject private var store: PlanStore
+    @EnvironmentObject private var windowCoordinator: HistoryWindowCoordinator
     @Environment(\.openWindow) private var openWindow
     @State private var draft = TradeDraft()
     @State private var editingPlanID: UUID?
@@ -113,7 +114,7 @@ struct CalculatorView: View {
         HStack(spacing: 9) {
             Spacer()
             Button {
-                openWindow(id: "history")
+                windowCoordinator.showHistory(openWindow: openWindow, dismissMenu: compact)
             } label: {
                 Label("历史", systemImage: "clock.arrow.circlepath")
             }
