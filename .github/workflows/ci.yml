@@ -1,0 +1,46 @@
+name: macOS build and core tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Run calculator unit tests
+        run: swift test
+      - name: Compile macOS app without developer account
+        run: |
+          xcodebuild \
+            -project TradePlanner.xcodeproj \
+            -scheme TradePlanner \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/TradePlannerDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+      - name: Package runnable macOS application
+        run: |
+          APP="$RUNNER_TEMP/TradePlannerDerivedData/Build/Products/Release/TradePlanner.app"
+          test -d "$APP"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent "$APP" dist/TradePlanner-macOS-unsigned.zip
+          shasum -a 256 dist/TradePlanner-macOS-unsigned.zip > dist/SHA256SUMS.txt
+      - name: Upload macOS app (download from Actions > Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradePlanner-macOS
+          path: |
+            dist/TradePlanner-macOS-unsigned.zip
+            dist/SHA256SUMS.txt
+          retention-days: 30
+          if-no-files-found: error

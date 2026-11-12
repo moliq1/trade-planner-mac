@@ -1,0 +1,231 @@
+import Foundation
+import SwiftUI
+import SwiftData
+import UniformTypeIdentifiers
+
+struct HistoryView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.openWindow) private var openWindow
+    @Query(sort: \TradePlan.updatedAt, order: .reverse) private var plans: [TradePlan]
+
+    @State private var searchText = ""
+    @State private var selectedID: UUID?
+    @State private var showDeleteConfirmation = false
+    @State private var exporting = false
+    @State private var alertText = ""
+    @State private var showAlert = false
+
+    private var filteredPlans: [TradePlan] {
+        guard !searchText.isEmpty else { return plans }
+        return plans.filter {
+            $0.symbol.localizedCaseInsensitiveContains(searchText) ||
+            $0.companyName.localizedCaseInsensitiveContains(searchText) ||
+            $0.notes.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    private var selectedPlan: TradePlan? { plans.first { $0.id == selectedID } }
+
+    var body: some View {
+        NavigationSplitView {
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    TextField("搜索名称、代码或备注", text: $searchText)
+                        .textFieldStyle(.roundedBorder)
+                    Button {
+                        exporting = true
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .help("导出当前筛选结果 CSV")
+                    .disabled(filteredPlans.isEmpty)
+                }
+                .padding([.top, .horizontal], 12)
+
+                List(selection: $selectedID) {
+                    ForEach(filteredPlans) { plan in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(plan.displayName).font(.headline)
+                                Text("\(plan.symbol) · \(PlanStatus(rawValue: plan.statusRaw)?.title ?? "计划中")")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(plan.updatedAt, style: .date)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 5) {
+                                Text("\(displayDecimal(plan.ratioText)) R")
+                                    .foregroundStyle(.green)
+                                    .font(.subheadline.bold())
+                                Text(plan.currencyCode)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .tag(plan.id)
+                    }
+                }
+            }
+            .navigationTitle("历史计划 · \(plans.count)")
+            .frame(minWidth: 290)
+        } detail: {
+            if let plan = selectedPlan {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 17) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(plan.displayName).font(.title2.bold())
+                                Text("\(plan.symbol) · \(TradeMarket(rawValue: plan.marketRaw)?.title ?? "其他") · \(plan.currencyCode)")
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("编辑计划") {
+                                openWindow(id: "editor", value: plan.id)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            Button(role: .destructive) {
+                                showDeleteConfirmation = true
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .help("删除计划")
+                        }
+                        HStack(spacing: 18) {
+                            summaryMetric("买入价", plan.entryText)
+                            summaryMetric("止损价", plan.stopPriceText)
+                            summaryMetric("止盈价", plan.targetPriceText)
+                        }
+                        HStack(spacing: 18) {
+                            summaryMetric("止损比例", "−\(displayDecimal(plan.lossPercentageText))%")
+                            summaryMetric("盈利比例", "+\(displayDecimal(plan.gainPercentageText))%")
+                            summaryMetric("盈亏比", "\(displayDecimal(plan.ratioText)) R")
+                        }
+                        if let quantity = plan.quantity {
+                            Divider()
+                            HStack(spacing: 18) {
+                                summaryMetric("参考数量", "\(quantity) 股")
+                                summaryMetric("计划亏损", plan.plannedLossText.map { "−\(displayDecimal($0))" } ?? "—")
+                                summaryMetric("计划盈利", plan.plannedGainText.map { "+\(displayDecimal($0))" } ?? "—")
+                            }
+                        }
+                        Divider()
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("原始计划与失效条件").font(.headline)
+                            Text(plan.notes.isEmpty ? "没有填写备注" : plan.notes)
+                                .foregroundStyle(plan.notes.isEmpty ? .secondary : .primary)
+                                .textSelection(.enabled)
+                        }
+                        Spacer(minLength: 20)
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("创建：\(plan.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                            Text("修改：\(plan.updatedAt.formatted(date: .abbreviated, time: .shortened))")
+                            Text("记录为计划快照，修改后会刷新当前计划数据。")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                    .padding(23)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .navigationTitle("计划详情")
+            } else {
+                ContentUnavailableView(
+                    "选择一条交易计划",
+                    systemImage: "tray.full",
+                    description: Text("在左侧查看历史记录；新计划从菜单栏图标创建。")
+                )
+            }
+        }
+        .confirmationDialog("确定删除此计划？", isPresented: $showDeleteConfirmation) {
+            Button("删除", role: .destructive) { deleteSelected() }
+        } message: {
+            Text("删除后无法恢复，建议先导出备份。")
+        }
+        .fileExporter(
+            isPresented: $exporting,
+            document: CSVDocument(plans: filteredPlans),
+            contentType: .commaSeparatedText,
+            defaultFilename: "trade-plans"
+        ) { result in
+            if case .failure(let error) = result {
+                present("导出失败：\(error.localizedDescription)")
+            }
+        }
+        .alert("交易计划助手", isPresented: $showAlert) {
+            Button("确定", role: .cancel) {}
+        } message: { Text(alertText) }
+    }
+
+    private func summaryMetric(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(value).font(.title3.bold()).monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func displayDecimal(_ text: String) -> String {
+        guard let number = DecimalText.parse(text) else { return text }
+        return DecimalText.display(number, places: 4)
+    }
+
+    private func deleteSelected() {
+        guard let plan = selectedPlan else { return }
+        let formerID = plan.id
+        modelContext.delete(plan)
+        do {
+            try modelContext.save()
+            if selectedID == formerID { selectedID = nil }
+        } catch {
+            modelContext.rollback()
+            present("删除失败：\(error.localizedDescription)")
+        }
+    }
+
+    private func present(_ text: String) {
+        alertText = text
+        showAlert = true
+    }
+}
+
+struct CSVDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.commaSeparatedText] }
+    static var writableContentTypes: [UTType] { [.commaSeparatedText] }
+
+    var csv: String
+
+    init(plans: [TradePlan]) {
+        let header = ["ID", "股票代码", "名称", "市场", "币种", "计划买入价", "止损价", "止盈价",
+                      "亏损比例%", "盈利比例%", "收益风险比R", "参考股数", "计划亏损", "计划盈利",
+                      "输入止损模式", "输入止损值", "输入止盈模式", "输入止盈值",
+                      "账户资金", "风险预算%", "每手股数", "状态", "备注", "创建时间", "更新时间"]
+        let rows = plans.map { p in
+            [p.id.uuidString, p.symbol, p.companyName, p.marketRaw, p.currencyCode,
+             p.entryText, p.stopPriceText, p.targetPriceText,
+             p.lossPercentageText, p.gainPercentageText, p.ratioText,
+             p.quantity.map(String.init) ?? "", p.plannedLossText ?? "", p.plannedGainText ?? "",
+             p.stopModeRaw, p.stopInputText, p.targetModeRaw, p.targetInputText,
+             p.capitalText, p.riskText, p.lotSizeText, p.statusRaw, p.notes,
+             ISO8601DateFormatter().string(from: p.createdAt),
+             ISO8601DateFormatter().string(from: p.updatedAt)]
+        }
+        csv = ([header] + rows).map { $0.map(CSVDocument.escape).joined(separator: ",") }
+            .joined(separator: "\r\n")
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        csv = String(decoding: configuration.file.regularFileContents ?? Data(), as: UTF8.self)
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        // UTF-8 BOM helps Excel on macOS/Windows interpret Chinese column names.
+        let bom = Data([0xEF, 0xBB, 0xBF])
+        return FileWrapper(regularFileWithContents: bom + Data(csv.utf8))
+    }
+
+    private static func escape(_ string: String) -> String {
+        "\"\(string.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+}
