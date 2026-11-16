@@ -29,6 +29,25 @@ struct CalculatorView: View {
     }
     private var result: TradeCalculation? { try? preview.get() }
 
+    private var exitResult: TradeExitCalculation? {
+        guard let result = result, draft.status == .closed else { return nil }
+        return try? draft.exitCalculation(using: result)
+    }
+
+    private var exitError: String? {
+        guard draft.status == .closed, let result = result else { return nil }
+        do {
+            _ = try draft.exitCalculation(using: result)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    private var canSave: Bool {
+        result != nil && (draft.status != .closed || exitResult != nil)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -62,6 +81,10 @@ struct CalculatorView: View {
                 }
                 .padding(.horizontal, 3)
 
+                if draft.status == .closed {
+                    exitCard
+                }
+
                 VStack(alignment: .leading, spacing: 6) {
                     sectionTitle("交易理由 / 失效条件", icon: "text.alignleft")
                     TextEditor(text: $draft.notes)
@@ -82,7 +105,7 @@ struct CalculatorView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(cobalt)
                     .controlSize(.large)
-                    .disabled(result == nil)
+                    .disabled(!canSave)
 
                     Button("重置") {
                         editingPlanID = nil
@@ -379,6 +402,73 @@ struct CalculatorView: View {
             }
         }
         .padding(.top, 1)
+    }
+
+    // All shares are assumed sold. Actual P&L is a gross estimate using the
+    // entered entry/sale prices and one fixed FX rate, not broker-confirmed P&L.
+    private var exitCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("结束交易 · 实际卖出", icon: "checkmark.circle", tint: cobalt)
+            textInput(
+                draft.market == .hongKong ? "实际卖出价（HKD/股）" : "实际卖出价（CNY/股）",
+                placeholder: "请输入实际卖出价",
+                text: $draft.sellPriceText
+            )
+
+            if let exit = exitResult {
+                let color = exit.realizedPnLCNY >= 0 ? profitColor : lossColor
+                HStack(spacing: 10) {
+                    exitMetric("实际盈亏（人民币）", signedMoney(exit.realizedPnLCNY), color: color)
+                    exitMetric("实际收益率", signedPercent(exit.realizedReturnPercentage), color: color)
+                }
+                HStack(spacing: 10) {
+                    exitMetric("实际卖出金额（人民币）",
+                               "¥" + DecimalText.display(exit.sellProceedsCNY), color: .primary)
+                    exitMetric("实际 R 倍数", signedR(exit.realizedR), color: color)
+                }
+                Text("按照买入股数全数卖出计算。未计佣金、印花税、滑点；港股使用计划中的固定汇率，非真实结算汇率。")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let error = exitError {
+                Label(error, systemImage: "exclamationmark.triangle")
+                    .foregroundColor(.orange)
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .panel()
+    }
+
+    private func exitMetric(_ title: String, _ content: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            fieldLabel(title)
+            Text(content)
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                .foregroundColor(color)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func signedMoney(_ amount: Decimal) -> String {
+        let prefix = amount > 0 ? "+¥" : amount < 0 ? "−¥" : "¥"
+        let magnitude = amount < 0 ? -amount : amount
+        return prefix + DecimalText.display(magnitude)
+    }
+
+    private func signedPercent(_ percentage: Decimal) -> String {
+        let prefix = percentage > 0 ? "+" : percentage < 0 ? "−" : ""
+        let magnitude = percentage < 0 ? -percentage : percentage
+        return prefix + DecimalText.display(magnitude) + "%"
+    }
+
+    private func signedR(_ value: Decimal) -> String {
+        let prefix = value > 0 ? "+" : value < 0 ? "−" : ""
+        let magnitude = value < 0 ? -value : value
+        return prefix + DecimalText.display(magnitude) + " R"
     }
 
     private func sectionTitle(_ name: String, icon: String, tint: Color = .primary) -> some View {

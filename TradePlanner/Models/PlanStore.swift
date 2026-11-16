@@ -29,16 +29,17 @@ final class PlanStore: ObservableObject {
     @discardableResult
     func save(draft: TradeDraft, calculation: TradeCalculation, editingID: UUID?) throws -> UUID {
         try checkHealthy()
+        let exit = try draft.exitCalculation(using: calculation)
         var updated = plans
         let resultID: UUID
         if let editingID {
             guard let index = updated.firstIndex(where: { $0.id == editingID }) else {
                 throw PlanStoreError.notFound
             }
-            updated[index].apply(draft: draft, calculation: calculation)
+            updated[index].apply(draft: draft, calculation: calculation, exit: exit)
             resultID = editingID
         } else {
-            let newPlan = TradePlan(draft: draft, calculation: calculation)
+            let newPlan = TradePlan(draft: draft, calculation: calculation, exit: exit)
             resultID = newPlan.id
             updated.append(newPlan)
         }

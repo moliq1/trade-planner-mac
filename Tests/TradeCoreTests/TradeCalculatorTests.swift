@@ -191,4 +191,53 @@ final class TradeCalculatorTests: XCTestCase {
         }
     }
 
+    func testActualProfitAndLossForFullExitInRMB() throws {
+        let plan = try TradeCalculator.calculate(.init(
+            entryPrice: 100, stopInput: 95, stopMode: .price,
+            targetInput: 115, targetMode: .price,
+            enteredQuantity: 2000
+        ))
+        let gain = try TradeCalculator.calculateExit(plan: plan, sellPrice: 110)
+        XCTAssertEqual(gain.sellProceedsCNY, 220000)
+        XCTAssertEqual(gain.realizedPnLCNY, 20000)
+        XCTAssertEqual(gain.realizedReturnPercentage, 10)
+        XCTAssertEqual(gain.realizedR, 2)
+
+        let loss = try TradeCalculator.calculateExit(plan: plan, sellPrice: 92)
+        XCTAssertEqual(loss.sellProceedsCNY, 184000)
+        XCTAssertEqual(loss.realizedPnLCNY, -16000)
+        XCTAssertEqual(loss.realizedReturnPercentage, -8)
+        XCTAssertEqual(loss.realizedR, Decimal(string: "-1.6")!)
+    }
+
+    func testHongKongActualProfitUsesFixedSavedConversion() throws {
+        let plan = try TradeCalculator.calculate(.init(
+            entryPrice: 102, stopInput: 94, stopMode: .price,
+            targetInput: 114, targetMode: .price,
+            enteredQuantity: 400, priceToCNYRate: Decimal(string: "0.85633")!
+        ))
+        let result = try TradeCalculator.calculateExit(plan: plan, sellPrice: 100)
+        XCTAssertEqual(result.sellProceedsCNY, Decimal(string: "34253.2")!)
+        XCTAssertEqual(result.realizedPnLCNY, Decimal(string: "-685.064")!)
+        XCTAssertEqual(NSDecimalNumber(decimal: result.realizedReturnPercentage).doubleValue,
+                       -200.0 / 102.0, accuracy: 0.000001)
+        XCTAssertEqual(result.realizedR, Decimal(string: "-0.25")!)
+    }
+
+    func testCloseRequiresPositiveSalePriceAndShares() throws {
+        let noShares = try TradeCalculator.calculate(.init(
+            entryPrice: 100, stopInput: 95, stopMode: .price,
+            targetInput: 115, targetMode: .price
+        ))
+        XCTAssertThrowsError(try TradeCalculator.calculateExit(plan: noShares, sellPrice: 110)) {
+            XCTAssertEqual($0 as? TradeCalculationError, .missingCloseQuantity)
+        }
+        let shares = try TradeCalculator.calculate(.init(
+            entryPrice: 100, stopInput: 95, stopMode: .price,
+            targetInput: 115, targetMode: .price, enteredQuantity: 100
+        ))
+        XCTAssertThrowsError(try TradeCalculator.calculateExit(plan: shares, sellPrice: 0)) {
+            XCTAssertEqual($0 as? TradeCalculationError, .invalidSellPrice)
+        }
+    }
 }

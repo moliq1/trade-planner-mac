@@ -64,6 +64,7 @@ struct TradeDraft {
     var lotSizeText = "100"
     var enteredQuantityText = "" // Blank: do not infer a trade from recommended size.
     var status: PlanStatus = .planned
+    var sellPriceText = ""
     var notes = ""
 
     func calculationInput() throws -> TradeCalculationInput {
@@ -123,6 +124,19 @@ struct TradeDraft {
         )
     }
 
+    /// A closed plan must have actual sale price and a real planned share count.
+    /// Non-closed records are not forced to supply execution data.
+    func exitCalculation(using plan: TradeCalculation) throws -> TradeExitCalculation? {
+        guard status == .closed else { return nil }
+        guard !sellPriceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw TradeCalculationError.missingSellPrice
+        }
+        guard let price = DecimalText.parse(sellPriceText), price > 0 else {
+            throw TradeCalculationError.invalidSellPrice
+        }
+        return try TradeCalculator.calculateExit(plan: plan, sellPrice: price)
+    }
+
     init() {}
 
     init(from plan: TradePlan) {
@@ -141,6 +155,7 @@ struct TradeDraft {
         lotSizeText = plan.lotSizeText
         enteredQuantityText = plan.enteredQuantity.map(String.init) ?? ""
         status = PlanStatus(rawValue: plan.statusRaw) ?? .planned
+        sellPriceText = plan.sellPriceText ?? ""
         notes = plan.notes
     }
 }
@@ -180,12 +195,20 @@ struct TradePlan: Identifiable, Codable {
     var enteredGainText: String?
     var riskAsCapitalPercentageText: String?
 
+    // Optional fields allow decoding plans saved before real exit tracking existed.
+    var sellPriceText: String?
+    var sellProceedsText: String?
+    var realizedPnLText: String?
+    var realizedReturnPctText: String?
+    var realizedRText: String?
+    var closedAt: Date?
+
     var statusRaw: String
     var notes: String
     var createdAt: Date
     var updatedAt: Date
 
-    init(draft: TradeDraft, calculation: TradeCalculation) {
+    init(draft: TradeDraft, calculation: TradeCalculation, exit: TradeExitCalculation? = nil) {
         id = UUID()
         symbol = ""
         companyName = ""
@@ -213,14 +236,20 @@ struct TradePlan: Identifiable, Codable {
         enteredLossText = nil
         enteredGainText = nil
         riskAsCapitalPercentageText = nil
+        sellPriceText = nil
+        sellProceedsText = nil
+        realizedPnLText = nil
+        realizedReturnPctText = nil
+        realizedRText = nil
+        closedAt = nil
         statusRaw = ""
         notes = ""
         createdAt = .now
         updatedAt = .now
-        apply(draft: draft, calculation: calculation)
+        apply(draft: draft, calculation: calculation, exit: exit)
     }
 
-    mutating func apply(draft: TradeDraft, calculation: TradeCalculation) {
+    mutating func apply(draft: TradeDraft, calculation: TradeCalculation, exit: TradeExitCalculation? = nil) {
         symbol = draft.symbol.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         companyName = draft.companyName.trimmingCharacters(in: .whitespacesAndNewlines)
         marketRaw = draft.market.rawValue
@@ -248,6 +277,22 @@ struct TradePlan: Identifiable, Codable {
         enteredGainText = calculation.enteredGain.map(DecimalText.exact)
         riskAsCapitalPercentageText = calculation.enteredRiskPercentOfCapital.map(DecimalText.exact)
         statusRaw = draft.status.rawValue
+        if draft.status == .closed, let exit = exit {
+            sellPriceText = DecimalText.exact(exit.sellPrice)
+            sellProceedsText = DecimalText.exact(exit.sellProceedsCNY)
+            realizedPnLText = DecimalText.exact(exit.realizedPnLCNY)
+            realizedReturnPctText = DecimalText.exact(exit.realizedReturnPercentage)
+            realizedRText = DecimalText.exact(exit.realizedR)
+            if closedAt == nil { closedAt = .now }
+        } else {
+            // A plan re-opened from closed no longer claims a realized exit.
+            sellPriceText = nil
+            sellProceedsText = nil
+            realizedPnLText = nil
+            realizedReturnPctText = nil
+            realizedRText = nil
+            closedAt = nil
+        }
         notes = draft.notes
         updatedAt = .now
     }

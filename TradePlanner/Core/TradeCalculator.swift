@@ -70,6 +70,16 @@ public struct TradeCalculation: Sendable {
     public let exceedsCapital: Bool?
 }
 
+public struct TradeExitCalculation: Sendable {
+    public let sellPrice: Decimal
+    public let sellProceedsCNY: Decimal
+    /// Signed, positive for profit and negative for loss.
+    public let realizedPnLCNY: Decimal
+    public let realizedReturnPercentage: Decimal
+    /// Signed reward in units of original planned per-share stop risk.
+    public let realizedR: Decimal
+}
+
 public enum TradeCalculationError: String, Error, LocalizedError, Equatable, Sendable {
     case invalidEntry
     case invalidStop
@@ -80,6 +90,9 @@ public enum TradeCalculationError: String, Error, LocalizedError, Equatable, Sen
     case excessiveQuantity
     case invalidEnteredQuantity
     case invalidExchangeRate
+    case missingSellPrice
+    case invalidSellPrice
+    case missingCloseQuantity
 
     public var errorDescription: String? {
         switch self {
@@ -92,11 +105,38 @@ public enum TradeCalculationError: String, Error, LocalizedError, Equatable, Sen
         case .excessiveQuantity: return "计算出的股数过大，请检查参数。"
         case .invalidEnteredQuantity: return "计划买入股数必须为正整数，且不能超过可计算范围。"
         case .invalidExchangeRate: return "港币兑人民币汇率必须大于 0。"
+        case .missingSellPrice: return "将状态设为已结束时，请填写实际卖出价。"
+        case .invalidSellPrice: return "实际卖出价必须大于 0。"
+        case .missingCloseQuantity: return "结束交易前请填写计划买入股数（本版按全部股数卖出计算）。"
         }
     }
 }
 
 public enum TradeCalculator {
+    /// Computes the full-exit P&L for all planned shares, assuming identical
+    /// buy/sell FX rate and no fees. Prices are quoted in stock currency;
+    /// proceeds and realized P&L are CNY, including Hong Kong shares.
+    public static func calculateExit(
+        plan: TradeCalculation, sellPrice: Decimal
+    ) throws -> TradeExitCalculation {
+        guard sellPrice > 0 else { throw TradeCalculationError.invalidSellPrice }
+        guard let quantity = plan.enteredQuantity, quantity > 0 else {
+            throw TradeCalculationError.missingCloseQuantity
+        }
+        let fx = plan.priceToCNYRate
+        let proceeds = sellPrice * Decimal(quantity) * fx
+        let pnl = (sellPrice - plan.entryPrice) * Decimal(quantity) * fx
+        let returnPercent = (sellPrice - plan.entryPrice) / plan.entryPrice * 100
+        let r = (sellPrice - plan.entryPrice) / (plan.entryPrice - plan.stopPrice)
+        return TradeExitCalculation(
+            sellPrice: sellPrice,
+            sellProceedsCNY: proceeds,
+            realizedPnLCNY: pnl,
+            realizedReturnPercentage: returnPercent,
+            realizedR: r
+        )
+    }
+
     /// Long-only, pre-fee / pre-slippage planning model.
     public static func calculate(_ input: TradeCalculationInput) throws -> TradeCalculation {
         let entry = input.entryPrice

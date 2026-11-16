@@ -25,6 +25,50 @@ struct HistoryView: View {
 
     private var selectedPlan: TradePlan? { plans.first { $0.id == selectedID } }
 
+    private func plans(for status: PlanStatus) -> [TradePlan] {
+        filteredPlans.filter { (PlanStatus(rawValue: $0.statusRaw) ?? .planned) == status }
+    }
+
+    private func sidebarRow(_ plan: TradePlan) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(plan.displayName)
+                    .font(.headline)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if !plan.symbol.isEmpty {
+                    Text(plan.symbol)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            HStack(spacing: 8) {
+                sidebarPrice("买", plan.entryText, color: .primary)
+                Spacer(minLength: 1)
+                sidebarPrice("止", plan.stopPriceText, color: .green)
+                Spacer(minLength: 1)
+                sidebarPrice("盈", plan.targetPriceText, color: .red)
+            }
+            Text(plan.updatedAt, style: .date)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+        }
+        .padding(.vertical, 3)
+    }
+
+    private func sidebarPrice(_ prefix: String, _ rawPrice: String, color: Color) -> some View {
+        HStack(spacing: 2) {
+            Text(prefix).foregroundColor(.secondary)
+            Text(displayPrice(rawPrice))
+                .foregroundColor(color)
+                .monospacedDigit()
+        }
+        .font(.caption)
+        .lineLimit(1)
+        .minimumScaleFactor(0.65)
+    }
+
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 8) {
@@ -48,28 +92,16 @@ struct HistoryView: View {
                         .padding(.horizontal, 12)
                 }
                 List(selection: $selectedID) {
-                    ForEach(filteredPlans) { plan in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(plan.displayName).font(.headline)
-                                Text("\(plan.symbol) · \(PlanStatus(rawValue: plan.statusRaw)?.title ?? "计划中")")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text(plan.updatedAt, style: .date)
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 5) {
-                                Text("\(displayDecimal(plan.ratioText)) R")
-                                    .foregroundStyle(.red)
-                                    .font(.subheadline.bold())
-                                Text(plan.settlementCurrency)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                    ForEach(PlanStatus.allCases) { status in
+                        if !plans(for: status).isEmpty {
+                            Section {
+                                ForEach(plans(for: status)) { plan in
+                                    sidebarRow(plan).tag(plan.id)
+                                }
+                            } header: {
+                                Text("\(status.title) · \(plans(for: status).count)")
                             }
                         }
-                        .tag(plan.id)
                     }
                 }
             }
@@ -125,6 +157,43 @@ struct HistoryView: View {
                             HStack(spacing: 18) {
                                 summaryMetric("买入金额（\(plan.settlementCurrency)）", plan.enteredCostText.map(displayMoney) ?? "—")
                                 summaryMetric("占总本金风险", plan.riskAsCapitalPercentageText.map { "\(displayDecimal($0))%" } ?? "—")
+                            }
+                        }
+                        if plan.statusRaw == PlanStatus.closed.rawValue {
+                            Divider()
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("实际卖出与结果").font(.headline)
+                                if let salePrice = plan.sellPriceText,
+                                   let realized = plan.realizedPnLText,
+                                   let pnl = DecimalText.parse(realized) {
+                                    let resultColor: Color = pnl >= 0 ? .red : .green
+                                    HStack(spacing: 18) {
+                                        summaryMetric("实际卖出价", displayPrice(salePrice))
+                                        summaryMetric("卖出总额（\(plan.settlementCurrency)）",
+                                            plan.sellProceedsText.map(displayMoney) ?? "—")
+                                    }
+                                    HStack(spacing: 18) {
+                                        summaryMetric("实际盈亏（\(plan.settlementCurrency)）",
+                                            signedMoney(realized), color: resultColor)
+                                        summaryMetric("实际收益率",
+                                            signedPercent(plan.realizedReturnPctText), color: resultColor)
+                                        summaryMetric("实际 R 倍数",
+                                            signedR(plan.realizedRText), color: resultColor)
+                                    }
+                                    if let date = plan.closedAt {
+                                        Text("结束时间：\(date.formatted(date: .abbreviated, time: .shortened))")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Text("按计划买入股数全部卖出、采用同一固定汇率计算；未计交易费用及结算汇差。")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Label("旧版已结束记录尚未填写实际卖出价；点击「编辑计划」补录。",
+                                          systemImage: "info.circle")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                }
                             }
                         }
                         Divider()
@@ -201,6 +270,27 @@ struct HistoryView: View {
         HistoryMoneyFormatter.format(text, grouped: true)
     }
 
+    private func signedMoney(_ raw: String) -> String {
+        guard let value = DecimalText.parse(raw) else { return raw }
+        let symbol = value > 0 ? "+" : value < 0 ? "−" : ""
+        let absolute = value < 0 ? -value : value
+        return symbol + displayMoney(DecimalText.exact(absolute))
+    }
+
+    private func signedPercent(_ raw: String?) -> String {
+        guard let raw = raw, let value = DecimalText.parse(raw) else { return "—" }
+        let symbol = value > 0 ? "+" : value < 0 ? "−" : ""
+        let absolute = value < 0 ? -value : value
+        return symbol + DecimalText.display(absolute, places: 2) + "%"
+    }
+
+    private func signedR(_ raw: String?) -> String {
+        guard let raw = raw, let value = DecimalText.parse(raw) else { return "—" }
+        let symbol = value > 0 ? "+" : value < 0 ? "−" : ""
+        let absolute = value < 0 ? -value : value
+        return symbol + DecimalText.display(absolute, places: 2) + " R"
+    }
+
     private func deleteSelected() {
         guard let plan = selectedPlan else { return }
         do {
@@ -228,7 +318,9 @@ struct CSVDocument: FileDocument {
                       "亏损比例%", "盈利比例%", "收益风险比R",
                       "输入止损模式", "输入止损值", "输入止盈模式", "输入止盈值",
                       "账户资金", "风险预算%", "每手股数", "状态", "备注", "创建时间", "更新时间",
-                      "计划买入股数", "本笔预计成本", "本笔止损亏损", "本笔止盈盈利", "本笔亏损占本金%", "金额计价币种", "HKD兑CNY参考汇率"]
+                      "计划买入股数", "本笔预计成本", "本笔止损亏损", "本笔止盈盈利", "本笔亏损占本金%", "金额计价币种", "HKD兑CNY参考汇率",
+                      "实际卖出价", "实际卖出总额(CNY)", "实际盈亏(CNY)",
+                      "实际收益率%", "实际R", "结束时间"]
         // Deliberately construct the columns in small typed groups: Swift's
         // type checker struggles with a giant heterogeneous optional expression.
         let rows: [[String]] = plans.map { p -> [String] in
@@ -254,6 +346,16 @@ struct CSVDocument: FileDocument {
                 p.riskAsCapitalPercentageText.flatMap { DecimalText.parse($0) }
                     .map { DecimalText.display($0, places: 2) } ?? "",
                 p.settlementCurrency, p.hkdToCnyText ?? ""
+            ])
+            fields.append(contentsOf: [
+                p.sellPriceText ?? "",
+                p.sellProceedsText.map { HistoryMoneyFormatter.format($0, grouped: false) } ?? "",
+                p.realizedPnLText.map { HistoryMoneyFormatter.format($0, grouped: false) } ?? "",
+                p.realizedReturnPctText.flatMap { DecimalText.parse($0) }
+                    .map { DecimalText.display($0, places: 2) } ?? "",
+                p.realizedRText.flatMap { DecimalText.parse($0) }
+                    .map { DecimalText.display($0, places: 2) } ?? "",
+                p.closedAt.map { isoDate.string(from: $0) } ?? ""
             ])
             return fields
         }
