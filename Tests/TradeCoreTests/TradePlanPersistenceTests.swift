@@ -109,6 +109,10 @@ final class TradePlanPersistenceTests: XCTestCase {
         draft.market = .hongKong
         draft.currencyCode = "HKD"
         draft.entryText = "102"
+        draft.stopMode = .price
+        draft.stopText = "94"
+        draft.targetMode = .price
+        draft.targetText = "114"
         draft.enteredQuantityText = "400"
         draft.status = .entered
         let plan = try TradeCalculator.calculate(draft.calculationInput())
