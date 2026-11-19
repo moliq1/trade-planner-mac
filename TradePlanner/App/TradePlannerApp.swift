@@ -220,7 +220,7 @@ final class HistoryWindowCoordinator: NSObject, ObservableObject, NSWindowDelega
         // LSUIElement starts in accessory mode. Temporarily become a regular
         // Dock application while history or editor windows are open, allowing
         // Mission Control to switch focus back from a browser on macOS 13.
-        if NSApp.activationPolicy != .regular {
+        if NSApp.activationPolicy() != .regular {
             let changed = NSApp.setActivationPolicy(.regular)
             if !changed {
                 NSLog("TradePlanner: regular activation policy unavailable")
@@ -241,7 +241,7 @@ final class HistoryWindowCoordinator: NSObject, ObservableObject, NSWindowDelega
     // Only act when the user explicitly activates TradePlanner (Dock or F3).
     // Do not continuously steal focus while the user works in another app.
     func restoreWindowOnAppActivation() {
-        guard NSApp.activationPolicy == .regular,
+        guard NSApp.activationPolicy() == .regular,
               NSApp.keyWindow == nil else { return }
         let windows = [historyWindow].compactMap { $0 } + Array(editorWindows.values)
         if let front = windows.first(where: { $0.isVisible }) {
