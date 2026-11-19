@@ -31,8 +31,8 @@ final class TradePlannerDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: TradePlannerStatusBar?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // An accessory app can activate its own windows without a Dock icon.
-        NSApp.setActivationPolicy(.accessory)
+        // LSUIElement in Info.plist already configures the app as an agent.
+        // Do not change the activation policy after SwiftUI has launched.
         let services = TradePlannerServices.shared
         statusBarController = TradePlannerStatusBar(
             store: services.store,
@@ -115,7 +115,11 @@ private final class TradePlannerStatusBar: NSObject {
     }
 
     @objc private func openHistory() {
-        coordinator.showHistory(dismissMenu: true)
+        // NSMenu actions fire while the menu is still tracking. Delay window
+        // activation until after the context menu has fully dismissed.
+        DispatchQueue.main.async { [weak self] in
+            self?.coordinator.showHistory(dismissMenu: true)
+        }
     }
 
     @objc private func quitApplication() {
@@ -134,7 +138,17 @@ final class HistoryWindowCoordinator: ObservableObject {
     }
 
     func showHistory(dismissMenu: Bool = true) {
+        // The left-click popover button and right-click NSMenu both arrive
+        // while an interactive menu/popup is active. Closing the popup and
+        // synchronously opening a window can leave it hidden behind other apps
+        // on macOS 13. Always finish dismissal first.
         if dismissMenu { dismissPopover?() }
+        DispatchQueue.main.async { [weak self] in
+            self?.presentHistoryWindow()
+        }
+    }
+
+    private func presentHistoryWindow() {
         if historyWindow == nil {
             let content = HistoryView()
                 .environmentObject(store)
@@ -179,6 +193,7 @@ final class HistoryWindowCoordinator: ObservableObject {
         )
         window.title = title
         window.isReleasedWhenClosed = false
+        window.collectionBehavior.insert(.moveToActiveSpace)
         window.contentViewController = NSHostingController(rootView: rootView)
         window.center()
         return window
@@ -186,7 +201,21 @@ final class HistoryWindowCoordinator: ObservableObject {
 
     private func activate(_ window: NSWindow?) {
         guard let window = window else { return }
+        if window.isMiniaturized { window.deminiaturize(nil) }
         NSApp.activate(ignoringOtherApps: true)
+        // In a UI-element/agent app, makeKeyAndOrderFront alone is sometimes
+        // insufficient to raise a new window above the previous frontmost app.
+        window.orderFrontRegardless()
         window.makeKeyAndOrderFront(nil)
+        // A second short focus pass allows AppKit to finish menu tracking and
+        // agent activation, and also handles an already-existing history window.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak window] in
+            guard let window = window, window.isVisible else { return }
+            if !window.isKeyWindow {
+                NSApp.activate(ignoringOtherApps: true)
+                window.orderFrontRegardless()
+                window.makeKeyAndOrderFront(nil)
+            }
+        }
     }
 }

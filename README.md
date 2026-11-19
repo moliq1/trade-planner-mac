@@ -120,3 +120,11 @@ GitHub Actions 自动运行计算测试、验证 arm64 / x86_64 两种架构与 
 - 旧版历史记录未保存买入日期，暂以创建日期作为排序依据，同时明确标注「买入日期待核实」，可编辑补录；兼容原有 JSON 数据。
 - 已结束计划新增单独的**交易复盘**文字框，可以记录计划执行、情绪、失误和改进；与最初买入依据分开保存，并导出 CSV。
 - 将 SwiftUI MenuBarExtra 换为 AppKit 原生 NSStatusItem + NSPopover，**左键显示/关闭计算器**、**右键打开历史记录/退出应用菜单**；支持 macOS 13.5。
+
+
+## 2026-11-19 修复：历史窗口无法从左键和右键打开
+
+- 修复 macOS 13 菜单栏应用从 NSPopover / NSMenu 中同步开窗可能造成的激活时序问题。先关闭菜单/下拉弹窗，下一轮主线程再建立或置前历史窗口。
+- 使用 AppKit 的 orderFrontRegardless + makeKeyAndOrderFront，并在必要时补做一次窗口置前处理；窗口最小化时先恢复。
+- 不再在启动后反复调用 setActivationPolicy，沿用 Info.plist 的 LSUIElement agent 设置，避免与 SwiftUI 生命周期冲突。
+- 两条入口（左键计算器中的「历史」与右键图标菜单中的「历史记录」）都复用同一个窗口显示方法。此修复不触及 JSON 历史文件、买入日期或复盘数据。
