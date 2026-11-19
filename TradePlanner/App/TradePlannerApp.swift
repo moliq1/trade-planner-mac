@@ -39,6 +39,19 @@ final class TradePlannerDelegate: NSObject, NSApplicationDelegate {
             coordinator: services.windows
         )
     }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        // Mission Control and Dock activation do not call the menu bar button.
+        DispatchQueue.main.async {
+            TradePlannerServices.shared.windows.restoreWindowOnAppActivation()
+        }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(
+        _ sender: NSApplication
+    ) -> Bool {
+        return false
+    }
 }
 
 // NSStatusItem gives us two unambiguous mouse actions. SwiftUI MenuBarExtra
@@ -127,7 +140,7 @@ private final class TradePlannerStatusBar: NSObject {
     }
 }
 
-final class HistoryWindowCoordinator: ObservableObject {
+final class HistoryWindowCoordinator: NSObject, ObservableObject, NSWindowDelegate {
     private let store: PlanStore
     private var historyWindow: NSWindow?
     private var editorWindows: [UUID: NSWindow] = [:]
@@ -135,6 +148,7 @@ final class HistoryWindowCoordinator: ObservableObject {
 
     init(store: PlanStore) {
         self.store = store
+        super.init()
     }
 
     func showHistory(dismissMenu: Bool = true) {
@@ -193,6 +207,7 @@ final class HistoryWindowCoordinator: ObservableObject {
         )
         window.title = title
         window.isReleasedWhenClosed = false
+        window.delegate = self
         window.collectionBehavior.insert(.moveToActiveSpace)
         window.contentViewController = NSHostingController(rootView: rootView)
         window.center()
@@ -201,20 +216,52 @@ final class HistoryWindowCoordinator: ObservableObject {
 
     private func activate(_ window: NSWindow?) {
         guard let window = window else { return }
+
+        // LSUIElement starts in accessory mode. Temporarily become a regular
+        // Dock application while history or editor windows are open, allowing
+        // Mission Control to switch focus back from a browser on macOS 13.
+        if NSApp.activationPolicy != .regular {
+            let changed = NSApp.setActivationPolicy(.regular)
+            if !changed {
+                NSLog("TradePlanner: regular activation policy unavailable")
+            }
+        }
         if window.isMiniaturized { window.deminiaturize(nil) }
         NSApp.activate(ignoringOtherApps: true)
-        // In a UI-element/agent app, makeKeyAndOrderFront alone is sometimes
-        // insufficient to raise a new window above the previous frontmost app.
-        window.orderFrontRegardless()
         window.makeKeyAndOrderFront(nil)
-        // A second short focus pass allows AppKit to finish menu tracking and
-        // agent activation, and also handles an already-existing history window.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak window] in
+
+        // AppKit may apply the activation-policy change on the next run-loop.
+        DispatchQueue.main.async { [weak window] in
             guard let window = window, window.isVisible else { return }
-            if !window.isKeyWindow {
-                NSApp.activate(ignoringOtherApps: true)
-                window.orderFrontRegardless()
-                window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    // Only act when the user explicitly activates TradePlanner (Dock or F3).
+    // Do not continuously steal focus while the user works in another app.
+    func restoreWindowOnAppActivation() {
+        guard NSApp.activationPolicy == .regular,
+              NSApp.keyWindow == nil else { return }
+        let windows = [historyWindow].compactMap { $0 } + Array(editorWindows.values)
+        if let front = windows.first(where: { $0.isVisible }) {
+            front.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let closing = notification.object as? NSWindow else { return }
+        if historyWindow === closing { historyWindow = nil }
+        editorWindows = editorWindows.filter { $0.value !== closing }
+
+        // Return to menu bar-only mode after the last managed window closes.
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if self.historyWindow == nil && self.editorWindows.isEmpty {
+                let changed = NSApp.setActivationPolicy(.accessory)
+                if !changed {
+                    NSLog("TradePlanner: accessory activation policy unavailable")
+                }
             }
         }
     }
