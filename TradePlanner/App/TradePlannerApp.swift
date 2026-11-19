@@ -169,8 +169,10 @@ final class HistoryWindowCoordinator: NSObject, ObservableObject, NSWindowDelega
                 .environmentObject(self)
             historyWindow = makeWindow(
                 title: "交易计划历史",
-                width: 940,
-                height: 660,
+                width: 1080,
+                height: 700,
+                minimumContentSize: NSSize(width: 820, height: 530),
+                frameAutosaveName: "TradePlanner.HistoryWindow.Frame.v1",
                 rootView: content
             )
         }
@@ -197,7 +199,12 @@ final class HistoryWindowCoordinator: NSObject, ObservableObject, NSWindowDelega
     }
 
     private func makeWindow<Content: View>(
-        title: String, width: CGFloat, height: CGFloat, rootView: Content
+        title: String,
+        width: CGFloat,
+        height: CGFloat,
+        minimumContentSize: NSSize = NSSize(width: 500, height: 600),
+        frameAutosaveName: String? = nil,
+        rootView: Content
     ) -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: width, height: height),
@@ -209,8 +216,39 @@ final class HistoryWindowCoordinator: NSObject, ObservableObject, NSWindowDelega
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.collectionBehavior.insert(.moveToActiveSpace)
-        window.contentViewController = NSHostingController(rootView: rootView)
+
+        let hostingController = NSHostingController(rootView: rootView)
+        // Avoid SwiftUI's automatic resizing of the AppKit window whenever
+        // NavigationSplitView recalculates its intrinsic content size.
+        hostingController.sizingOptions = []
+        window.contentViewController = hostingController
+        window.contentMinSize = minimumContentSize
+
+        // Set the requested size AFTER installing the SwiftUI controller.
+        // Cap the default to the available display area on smaller Macs.
+        let visible = NSScreen.main?.visibleFrame
+        let initialSize = NSSize(
+            width: min(width, max(minimumContentSize.width, (visible?.width ?? width) - 40)),
+            height: min(height, max(minimumContentSize.height, (visible?.height ?? height) - 40))
+        )
+        window.setContentSize(initialSize)
         window.center()
+
+        if let name = frameAutosaveName {
+            // Restore custom frame across closing/reopening and app launches.
+            _ = window.setFrameUsingName(name)
+            _ = window.setFrameAutosaveName(name)
+            let restoredContentSize = window.contentRect(
+                forFrameRect: window.frame
+            ).size
+            if restoredContentSize.width < minimumContentSize.width ||
+               restoredContentSize.height < minimumContentSize.height {
+                window.setContentSize(NSSize(
+                    width: max(minimumContentSize.width, restoredContentSize.width),
+                    height: max(minimumContentSize.height, restoredContentSize.height)
+                ))
+            }
+        }
         return window
     }
 
