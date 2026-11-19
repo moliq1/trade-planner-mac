@@ -63,9 +63,11 @@ struct TradeDraft {
     var riskText = "1"
     var lotSizeText = "100"
     var enteredQuantityText = "" // Blank: do not infer a trade from recommended size.
+    var buyDate: Date = .now  // Default the trading date to the day the plan is created.
     var status: PlanStatus = .planned
     var sellPriceText = ""
     var notes = ""
+    var reviewNotes = ""
 
     func calculationInput() throws -> TradeCalculationInput {
         guard let entry = DecimalText.parse(entryText) else {
@@ -156,7 +158,9 @@ struct TradeDraft {
         enteredQuantityText = plan.enteredQuantity.map(String.init) ?? ""
         status = PlanStatus(rawValue: plan.statusRaw) ?? .planned
         sellPriceText = plan.sellPriceText ?? ""
+        buyDate = plan.effectiveBuyDate
         notes = plan.notes
+        reviewNotes = plan.reviewNotes ?? ""
     }
 }
 
@@ -203,6 +207,10 @@ struct TradePlan: Identifiable, Codable {
     var realizedRText: String?
     var closedAt: Date?
 
+    // Optional for older JSON versions; legacy dates are unknown and fall back to createdAt.
+    var buyDate: Date?
+    var reviewNotes: String?
+
     var statusRaw: String
     var notes: String
     var createdAt: Date
@@ -242,6 +250,8 @@ struct TradePlan: Identifiable, Codable {
         realizedReturnPctText = nil
         realizedRText = nil
         closedAt = nil
+        buyDate = nil
+        reviewNotes = nil
         statusRaw = ""
         notes = ""
         createdAt = .now
@@ -294,8 +304,14 @@ struct TradePlan: Identifiable, Codable {
             closedAt = nil
         }
         notes = draft.notes
+        buyDate = draft.buyDate
+        // Keep the user's review even when they temporarily reopen a closed plan.
+        reviewNotes = draft.reviewNotes.isEmpty ? nil : draft.reviewNotes
         updatedAt = .now
     }
+
+    // Existing plans did not record buyDate; do not pretend createdAt was actual buy time.
+    var effectiveBuyDate: Date { buyDate ?? createdAt }
 
     var settlementCurrency: String {
         if marketRaw == TradeMarket.hongKong.rawValue {

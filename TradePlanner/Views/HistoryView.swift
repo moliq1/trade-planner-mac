@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 struct HistoryView: View {
     @EnvironmentObject private var store: PlanStore
-    @Environment(\.openWindow) private var openWindow
+    @EnvironmentObject private var windowCoordinator: HistoryWindowCoordinator
     private var plans: [TradePlan] { store.plans }
 
     @State private var searchText = ""
@@ -15,11 +15,18 @@ struct HistoryView: View {
     @State private var showAlert = false
 
     private var filteredPlans: [TradePlan] {
-        guard !searchText.isEmpty else { return plans }
-        return plans.filter {
+        let matches = searchText.isEmpty ? plans : plans.filter {
             $0.symbol.localizedCaseInsensitiveContains(searchText) ||
             $0.companyName.localizedCaseInsensitiveContains(searchText) ||
-            $0.notes.localizedCaseInsensitiveContains(searchText)
+            $0.notes.localizedCaseInsensitiveContains(searchText) ||
+            ($0.reviewNotes ?? "").localizedCaseInsensitiveContains(searchText)
+        }
+        // Always sort by buy date (newest first), not edit time.
+        return matches.sorted {
+            if $0.effectiveBuyDate == $1.effectiveBuyDate {
+                return $0.updatedAt > $1.updatedAt
+            }
+            return $0.effectiveBuyDate > $1.effectiveBuyDate
         }
     }
 
@@ -50,9 +57,12 @@ struct HistoryView: View {
                 Spacer(minLength: 1)
                 sidebarPrice("盈", plan.targetPriceText, color: .red)
             }
-            Text(plan.updatedAt, style: .date)
-                .font(.caption2)
-                .foregroundColor(.secondary)
+            HStack(spacing: 4) {
+                Text(plan.buyDate == nil ? "日期待核实 ·" : "买入 ·")
+                Text(plan.effectiveBuyDate, style: .date)
+            }
+            .font(.caption2)
+            .foregroundColor(.secondary)
         }
         .padding(.vertical, 3)
     }
@@ -119,7 +129,7 @@ struct HistoryView: View {
                             }
                             Spacer()
                             Button("编辑计划") {
-                                openWindow(id: "editor", value: plan.id)
+                                windowCoordinator.showEditor(planID: plan.id)
                             }
                             .buttonStyle(.borderedProminent)
                             Button(role: .destructive) {
@@ -128,6 +138,22 @@ struct HistoryView: View {
                                 Image(systemName: "trash")
                             }
                             .help("删除计划")
+                        }
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("买入日期")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text(plan.effectiveBuyDate, style: .date)
+                                    .font(.headline)
+                            }
+                            Spacer()
+                            if plan.buyDate == nil {
+                                Label("旧记录未保存买入日期，暂用创建日期；请编辑核对",
+                                      systemImage: "exclamationmark.triangle")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                            }
                         }
                         HStack(spacing: 18) {
                             summaryMetric("买入价", displayPrice(plan.entryText))
@@ -202,6 +228,19 @@ struct HistoryView: View {
                             Text(plan.notes.isEmpty ? "没有填写备注" : plan.notes)
                                 .foregroundStyle(plan.notes.isEmpty ? .secondary : .primary)
                                 .textSelection(.enabled)
+                        }
+                        if plan.statusRaw == PlanStatus.closed.rawValue {
+                            Divider()
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text("交易复盘").font(.headline)
+                                Text(plan.reviewNotes?.isEmpty == false ?
+                                     (plan.reviewNotes ?? "") :
+                                     "尚未填写复盘；点击「编辑计划」记录交易经验。")
+                                    .foregroundColor(plan.reviewNotes?.isEmpty == false ?
+                                                     .primary : .secondary)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
                         Spacer(minLength: 20)
                         VStack(alignment: .leading, spacing: 5) {
@@ -320,7 +359,7 @@ struct CSVDocument: FileDocument {
                       "账户资金", "风险预算%", "每手股数", "状态", "备注", "创建时间", "更新时间",
                       "计划买入股数", "本笔预计成本", "本笔止损亏损", "本笔止盈盈利", "本笔亏损占本金%", "金额计价币种", "HKD兑CNY参考汇率",
                       "实际卖出价", "实际卖出总额(CNY)", "实际盈亏(CNY)",
-                      "实际收益率%", "实际R", "结束时间"]
+                      "实际收益率%", "实际R", "结束时间", "买入日期", "交易复盘"]
         // Deliberately construct the columns in small typed groups: Swift's
         // type checker struggles with a giant heterogeneous optional expression.
         let rows: [[String]] = plans.map { p -> [String] in
@@ -355,7 +394,9 @@ struct CSVDocument: FileDocument {
                     .map { DecimalText.display($0, places: 2) } ?? "",
                 p.realizedRText.flatMap { DecimalText.parse($0) }
                     .map { DecimalText.display($0, places: 2) } ?? "",
-                p.closedAt.map { isoDate.string(from: $0) } ?? ""
+                p.closedAt.map { isoDate.string(from: $0) } ?? "",
+                HistoryDateFormatter.format(p.effectiveBuyDate),
+                p.reviewNotes ?? ""
             ])
             return fields
         }
@@ -392,5 +433,17 @@ private enum HistoryMoneyFormatter {
         formatter.roundingMode = .halfUp
         return formatter.string(from: NSDecimalNumber(decimal: value))
             ?? DecimalText.display(value, places: 2)
+    }
+}
+
+
+// Local calendar day is more useful for trade reviews than UTC midnight.
+private enum HistoryDateFormatter {
+    static func format(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
 }

@@ -180,4 +180,85 @@ final class TradePlanPersistenceTests: XCTestCase {
         XCTAssertNil(old.closedAt)
     }
 
+
+    func testBuyDateDefaultsToCreationDayAndCanBeEdited() throws {
+        let draft = TradeDraft()
+        XCTAssertTrue(Calendar.current.isDate(draft.buyDate, inSameDayAs: Date()))
+
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "TradePlanner-Date-\(UUID().uuidString)", isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let store = PlanStore(directory: temp)
+        var edited = draft
+        edited.symbol = "601899"
+        let oldDate = Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 18, hour: 12))!
+        edited.buyDate = oldDate
+        let input = try TradeCalculator.calculate(edited.calculationInput())
+        let id = try store.save(draft: edited, calculation: input, editingID: nil)
+        XCTAssertEqual(store.plans.first?.buyDate, oldDate)
+
+        let loaded = PlanStore(directory: temp)
+        let plan = try XCTUnwrap(loaded.plans.first)
+        XCTAssertEqual(plan.buyDate, oldDate)
+        XCTAssertEqual(TradeDraft(from: plan).buyDate, oldDate)
+
+        edited.buyDate = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 6, hour: 12))!
+        _ = try loaded.save(draft: edited, calculation: input, editingID: id)
+        XCTAssertEqual(loaded.plans.first?.buyDate, edited.buyDate)
+    }
+
+    func testOldRecordsUseCreatedAtForSortButAreNotMarkedAsActualBuyDate() throws {
+        let draft = TradeDraft()
+        let plan = TradePlan(draft: draft, calculation: try TradeCalculator.calculate(draft.calculationInput()))
+        var raw = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(plan)) as? [String: Any])
+        raw.removeValue(forKey: "buyDate")
+        raw.removeValue(forKey: "reviewNotes")
+        let legacy = try JSONDecoder().decode(
+            TradePlan.self, from: JSONSerialization.data(withJSONObject: raw)
+        )
+        XCTAssertNil(legacy.buyDate)
+        XCTAssertNil(legacy.reviewNotes)
+        XCTAssertEqual(legacy.effectiveBuyDate, legacy.createdAt)
+        XCTAssertEqual(TradeDraft(from: legacy).buyDate, legacy.createdAt)
+    }
+
+    func testClosedPlanReviewSurvivesSaveReloadAndEditing() throws {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "TradePlanner-Review-\(UUID().uuidString)", isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let store = PlanStore(directory: temp)
+        var draft = TradeDraft()
+        draft.symbol = "02899"
+        draft.enteredQuantityText = "200"
+        draft.status = .closed
+        draft.sellPriceText = "110"
+        draft.reviewNotes = "按计划止盈；下次注意量能。"
+        let calculation = try TradeCalculator.calculate(draft.calculationInput())
+        let id = try store.save(draft: draft, calculation: calculation, editingID: nil)
+        XCTAssertEqual(store.plans.first?.reviewNotes, draft.reviewNotes)
+
+        let reloaded = PlanStore(directory: temp)
+        let restored = try XCTUnwrap(reloaded.plans.first)
+        XCTAssertEqual(restored.reviewNotes, draft.reviewNotes)
+        var edit = TradeDraft(from: restored)
+        edit.reviewNotes += " 未出现冲动追涨。"
+        _ = try reloaded.save(draft: edit, calculation: calculation, editingID: id)
+        XCTAssertEqual(reloaded.plans.first?.reviewNotes, edit.reviewNotes)
+    }
+
+    func testDateSortingWithinSameStatus() throws {
+        var recent = TradeDraft()
+        recent.status = .entered
+        let old = Calendar.current.date(from: DateComponents(year: 2026, month: 9, day: 1, hour: 12))!
+        let latest = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 12, hour: 12))!
+        recent.buyDate = latest
+        let newPlan = TradePlan(draft: recent, calculation: try TradeCalculator.calculate(recent.calculationInput()))
+        recent.buyDate = old
+        let oldPlan = TradePlan(draft: recent, calculation: try TradeCalculator.calculate(recent.calculationInput()))
+        let sorted = [oldPlan, newPlan].sorted { $0.effectiveBuyDate > $1.effectiveBuyDate }
+        XCTAssertEqual(sorted.map(\.buyDate), [latest, old])
+    }
+
 }
