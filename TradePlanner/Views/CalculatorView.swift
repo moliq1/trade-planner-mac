@@ -95,6 +95,23 @@ struct CalculatorView: View {
                         )
                 }
 
+                if draft.status == .closed {
+                    VStack(alignment: .leading, spacing: 8) {
+                        sectionTitle("交易复盘", icon: "book.closed", tint: cobalt)
+                        Text("交易执行、买卖原因、情绪、得失和下次改进")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        TextEditor(text: $draft.reviewNotes)
+                            .font(.body)
+                            .frame(height: compact ? 84 : 130)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 9)
+                                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                            )
+                    }
+                    .panel()
+                }
+
                 HStack(spacing: 10) {
                     Button(action: savePlan) {
                         Label(editingPlanID == nil ? "保存交易计划" : "保存修改",
@@ -204,6 +221,18 @@ struct CalculatorView: View {
                       placeholder: "例如 168.10", text: $draft.entryText)
             textInput("计划买入股数（选填）", placeholder: "输入股数后计算本笔金额与风险",
                       text: $draft.enteredQuantityText)
+            Divider()
+            HStack(spacing: 12) {
+                Label("买入日期", systemImage: "calendar")
+                    .font(.subheadline.weight(.medium))
+                Spacer(minLength: 5)
+                DatePicker("买入日期", selection: $draft.buyDate,
+                           displayedComponents: [.date])
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+                    .fixedSize()
+            }
+            .padding(.vertical, 4)
         }
         .panel()
     }
